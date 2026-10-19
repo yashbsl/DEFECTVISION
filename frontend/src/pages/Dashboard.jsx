@@ -64,31 +64,8 @@ const SAMPLE_DEFECTS = [
   { name: "Scratches", file: "scratches_241.jpg",      code: "06", color: "#16a34a" },
 ];
 
-const INITIAL_QUEUE = [
-  { id: "TASK-8841", coilId: "COIL-HT-902", line: "Roughing Stand 02",    sample: "crazing_241.jpg",        status: "PROCESSING", progress: 72, priority: "HIGH",     time: "12:02 PM", heatNumber: "H-44910" },
-  { id: "TASK-8842", coilId: "COIL-HT-903", line: "Continuous Mill 04",   sample: "inclusion_241.jpg",      status: "PENDING",    progress: 0,  priority: "CRITICAL",  time: "12:05 PM", heatNumber: "H-44911" },
-  { id: "TASK-8843", coilId: "COIL-CL-311", line: "Cold Finishing Stand", sample: "patches_241.jpg",        status: "PENDING",    progress: 0,  priority: "NORMAL",    time: "12:08 PM", heatNumber: "H-44912" },
-  { id: "TASK-8844", coilId: "COIL-CL-312", line: "Pickling Entry Gate",  sample: "scratches_241.jpg",      status: "QUEUED",     progress: 0,  priority: "NORMAL",    time: "12:10 PM", heatNumber: "H-44913" },
-];
-
-const INITIAL_COMPLETED = [
-  { id: "COMP-771", coilId: "COIL-HT-899", specimen: "crazing_241.jpg",        time: "11:52 AM", defectCount: 3, primaryDefect: "crazing",        confidence: "94.2%", verdict: "REJECT",  grade: "GRADE C", operator: "Alex Mercer", latency: "17.2ms" },
-  { id: "COMP-770", coilId: "COIL-HT-898", specimen: "inclusion_241.jpg",      time: "11:45 AM", defectCount: 2, primaryDefect: "inclusion",      confidence: "96.4%", verdict: "REJECT",  grade: "GRADE C", operator: "Alex Mercer", latency: "18.9ms" },
-  { id: "COMP-769", coilId: "COIL-CL-308", specimen: "patches_241.jpg",        time: "11:34 AM", defectCount: 1, primaryDefect: "patches",        confidence: "93.0%", verdict: "WARNING", grade: "GRADE B", operator: "Alex Mercer", latency: "16.4ms" },
-  { id: "COMP-768", coilId: "COIL-CL-307", specimen: "scratches_241.jpg",      time: "11:18 AM", defectCount: 2, primaryDefect: "scratches",      confidence: "97.2%", verdict: "WARNING", grade: "GRADE B", operator: "Sarah Chen",  latency: "19.1ms" },
-  { id: "COMP-767", coilId: "COIL-HT-895", specimen: "clean_strip_102.jpg",    time: "11:05 AM", defectCount: 0, primaryDefect: "none",           confidence: "99.8%", verdict: "PASS",    grade: "GRADE A", operator: "Sarah Chen",  latency: "15.8ms" },
-  { id: "COMP-766", coilId: "COIL-HT-894", specimen: "pitted_surface_241.jpg", time: "10:50 AM", defectCount: 1, primaryDefect: "pitted_surface", confidence: "95.5%", verdict: "REJECT",  grade: "GRADE C", operator: "Sarah Chen",  latency: "17.6ms" },
-];
-
-const TREND_DAYS = [
-  { day: "MON", total: 210, passed: 198, failed: 12, rate: 94.3 },
-  { day: "TUE", total: 245, passed: 232, failed: 13, rate: 94.7 },
-  { day: "WED", total: 260, passed: 251, failed: 9,  rate: 96.5 },
-  { day: "THU", total: 230, passed: 218, failed: 12, rate: 94.8 },
-  { day: "FRI", total: 280, passed: 263, failed: 17, rate: 93.9 },
-  { day: "SAT", total: 190, passed: 181, failed: 9,  rate: 95.2 },
-  { day: "SUN", total: 142, passed: 135, failed: 7,  rate: 95.1 },
-];
+const INITIAL_QUEUE = [];
+const INITIAL_COMPLETED = [];
 
 function prettyName(name = "") {
   return name.replaceAll("_", " ").replace(/\b\w/g, (l) => l.toUpperCase());
@@ -146,8 +123,8 @@ const DEFAULT_PROFILE = {
   employeeId: "EMP-77421",
   certifications: "ISO 9001, ASTM A370, NEU-DET Certified",
   joinDate: "2021-03-15",
-  totalInspections: 2847,
-  avgAccuracy: "94.8%",
+  totalInspections: 0,
+  avgAccuracy: "Not measured",
   notifEmail: true,
   notifCritical: true,
   notifBatch: false,
@@ -170,7 +147,7 @@ export default function Dashboard() {
 
   // ── Navigation
   const [activeTab, setActiveTab] = useState("analytics");
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => typeof window !== "undefined" && window.innerWidth < 768);
 
   // ── Inspector — Single file
   const [file, setFile] = useState(null);
@@ -200,7 +177,9 @@ export default function Dashboard() {
 
   // ── Tasks
   const [pendingTasks, setPendingTasks] = useState(INITIAL_QUEUE);
-  const [completedTasks, setCompletedTasks] = useState(INITIAL_COMPLETED);
+  const [completedTasks, setCompletedTasks] = useState(() => {
+    try { return JSON.parse(sessionStorage.getItem("defectvision-inspections") || "[]"); } catch { return INITIAL_COMPLETED; }
+  });
   const [isProcessingQueue, setIsProcessingQueue] = useState(false);
   const [historySearch, setHistorySearch] = useState("");
   const [historyFilter, setHistoryFilter] = useState("ALL");
@@ -322,7 +301,7 @@ export default function Dashboard() {
     if (!file || loading) return;
     setLoading(true); setError(""); setResult(null); setSelectedDetection(null);
     try {
-      const data = await inspectImage(file, confidenceFilter);
+      const data = await inspectImage(file, confidenceFilter / 100);
       setResult(data);
       addToCompleted(file.name, data.detections || [], data.latency_ms, data.grade, data.verdict);
     } catch (err) {
@@ -336,7 +315,7 @@ export default function Dashboard() {
     if (batchFiles.length === 0 || batchLoading) return;
     setBatchLoading(true); setBatchError(""); setBatchResults(null);
     try {
-      const data = await inspectBatch(batchFiles, confidenceFilter);
+      const data = await inspectBatch(batchFiles, confidenceFilter / 100);
       setBatchResults(data);
       // Add each result to completed log
       data.results.forEach((r) => {
@@ -349,20 +328,27 @@ export default function Dashboard() {
   }
 
   function addToCompleted(filename, detections, latencyMs, grade, verdict) {
+    const detectedVerdict = verdict || calculateVerdict(detections).status;
     const record = {
-      id: `COMP-${Math.floor(800 + Math.random() * 999)}`,
-      coilId: `COIL-RT-${Math.floor(1000 + Math.random() * 9000)}`,
+      id: `INS-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
       specimen: filename,
-      time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      timestamp: new Date().toISOString(),
+      time: new Date().toLocaleString([], { dateStyle: "short", timeStyle: "short" }),
       defectCount: detections.length,
       primaryDefect: detections[0]?.defect || "none",
-      confidence: detections[0] ? `${(detections[0].confidence * 100).toFixed(1)}%` : "99.8%",
-      verdict: verdict || calculateVerdict(detections).status,
+      confidence: detections[0] ? `${(confidencePercent(detections[0].confidence)).toFixed(1)}%` : "—",
+      verdict: detectedVerdict,
       grade: grade || calculateVerdict(detections).grade,
       operator: profile.name,
-      latency: latencyMs ? `${latencyMs.toFixed(1)}ms` : "—",
+      latency: Number.isFinite(Number(latencyMs)) ? `${Number(latencyMs).toFixed(1)}ms` : "—",
+      latencyMs: Number.isFinite(Number(latencyMs)) ? Number(latencyMs) : null,
+      detections: (detections || []).map((d) => ({ defect: d.defect || "unknown", confidence: Number(d.confidence) || 0 })),
     };
-    setCompletedTasks((prev) => [record, ...prev]);
+    setCompletedTasks((prev) => {
+      const next = [record, ...prev];
+      try { sessionStorage.setItem("defectvision-inspections", JSON.stringify(next)); } catch {}
+      return next;
+    });
   }
 
   // ────────────────── SLIDER ──────────────────
@@ -374,7 +360,7 @@ export default function Dashboard() {
   }
 
   // ────────────────── QUEUE ──────────────────
-  function runQueueTask(task) { loadPresetSample(task.sample); setActiveTab("inspector"); }
+  function runQueueTask(task) { if (task?.sample) loadPresetSample(task.sample); setActiveTab("inspector"); }
   function simulateProcessBatch() {
     setIsProcessingQueue(true);
     setTimeout(() => { setPendingTasks((p) => p.map((t) => ({ ...t, status: "COMPLETED", progress: 100 }))); setIsProcessingQueue(false); }, 1800);
@@ -404,19 +390,38 @@ export default function Dashboard() {
   const rawDetections = result?.detections || [];
   const filteredDetections = rawDetections.filter((d) => confidencePercent(d.confidence) >= confidenceFilter);
   const currentVerdict = calculateVerdict(filteredDetections);
+  const totalInspections = completedTasks.length;
+  const passCount = completedTasks.filter((t) => t.verdict === "PASS").length;
+  const warningCount = completedTasks.filter((t) => t.verdict === "WARNING").length;
+  const rejectCount = completedTasks.filter((t) => t.verdict === "REJECT").length;
+  const successRate = totalInspections ? (passCount / totalInspections) * 100 : null;
+  const avgLatency = completedTasks.filter((t) => Number.isFinite(t.latencyMs)).length
+    ? completedTasks.filter((t) => Number.isFinite(t.latencyMs)).reduce((sum, t) => sum + t.latencyMs, 0) / completedTasks.filter((t) => Number.isFinite(t.latencyMs)).length
+    : null;
+  const defectCounts = completedTasks.flatMap((t) => t.detections || []).reduce((acc, d) => {
+    const key = d.defect || "unknown";
+    acc[key] = (acc[key] || 0) + 1;
+    return acc;
+  }, {});
+  const defectDistribution = Object.entries(defectCounts).sort((a, b) => b[1] - a[1]);
   const displayedCompleted = completedTasks.filter((t) => {
-    const matchSearch = t.coilId.toLowerCase().includes(historySearch.toLowerCase()) ||
-                        t.specimen.toLowerCase().includes(historySearch.toLowerCase()) ||
-                        t.primaryDefect.toLowerCase().includes(historySearch.toLowerCase());
-    return matchSearch && (historyFilter === "ALL" || t.verdict === historyFilter);
+    // Older/session records may not contain every field; normalize before searching.
+    const query = String(historySearch || "").toLowerCase();
+    const coilId = String(t?.coilId || "");
+    const specimen = String(t?.specimen || t?.filename || "");
+    const primaryDefect = String(t?.primaryDefect || t?.detections?.[0]?.defect || "none");
+    const matchSearch = coilId.toLowerCase().includes(query) ||
+                        specimen.toLowerCase().includes(query) ||
+                        primaryDefect.toLowerCase().includes(query);
+    return matchSearch && (historyFilter === "ALL" || t?.verdict === historyFilter);
   });
 
   const TABS = [
-    { id: "analytics", label: "SUCCESS RATE & YIELD", badge: "94.8% PASS", badgeColor: "bg-emerald-600 text-white", icon: <BarChart3 size={18} /> },
+    { id: "analytics", label: "INSPECTION ANALYTICS", badge: `${completedTasks.length} RUNS`, icon: <BarChart3 size={18} /> },
     { id: "inspector", label: "LIVE INSPECTOR",        badge: "STUDIO",     icon: <Crosshair size={18} /> },
     { id: "queue",     label: "BATCH QUEUE",           badge: `${pendingTasks.filter((t) => t.status !== "COMPLETED").length} PENDING`, badgeColor: "bg-amber-500 text-black", icon: <ListTodo size={18} /> },
     { id: "history",   label: "COMPLETED AUDIT",       badge: `${completedTasks.length} RUNS`, icon: <History size={18} /> },
-    { id: "benchmarks",label: "MODEL BENCHMARKS",      badge: "67.7% mAP",  icon: <Cpu size={18} /> },
+    { id: "benchmarks",label: "MODEL INFO",      badge: "API",  icon: <Cpu size={18} /> },
     { id: "profile",   label: "OPERATOR PROFILE",      badge: profile.role.split(" ")[0].toUpperCase(), icon: <User size={18} /> },
   ];
 
@@ -424,12 +429,73 @@ export default function Dashboard() {
   //  RENDER
   // ═══════════════════════════════════════════════════════════════
   return (
-    <div className={`min-h-screen flex flex-col font-mono selection:bg-[#d5ff38] selection:text-black transition-colors duration-200 ${c.bg}`}>
+    <div className={`dashboard-shell min-h-screen flex flex-col font-mono selection:bg-[#d5ff38] selection:text-black transition-colors duration-200 ${c.bg}`}>
+
+      <style>{`
+        .dashboard-shell { --dv-accent: #d5ff38; }
+        .dashboard-shell main { min-width: 0; }
+        .dashboard-shell button { -webkit-tap-highlight-color: transparent; }
+        .dashboard-shell button:focus-visible,
+        .dashboard-shell input:focus-visible,
+        .dashboard-shell label:focus-within { outline: 2px solid var(--dv-accent); outline-offset: 2px; }
+        .dashboard-shell main > div { animation: dv-enter .22s ease-out; }
+        .dashboard-shell main [class*="border"] { transition: border-color .18s ease, background-color .18s ease, transform .18s ease; }
+        .dashboard-shell main [class*="grid"] > [class*="border"]:hover { border-color: ${isDark ? "#454936" : "#b7c2a2"}; }
+        .dashboard-shell .dv-scroll-x { max-width: 100%; overflow-x: auto; }
+        @keyframes dv-enter { from { opacity: .65; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+        @media (max-width: 767px) {
+          .dashboard-shell { width: 100%; max-width: 100vw; overflow-x: hidden; }
+          .dashboard-shell main {
+            width: 100%; min-width: 0; max-width: 100%;
+            padding: 12px; gap: 16px; overflow-x: hidden;
+          }
+          .dashboard-shell main > div { min-width: 0; max-width: 100%; }
+          .dashboard-shell main h2,
+          .dashboard-shell main h3,
+          .dashboard-shell main p { overflow-wrap: anywhere; }
+          .dashboard-shell header { width: 100%; max-width: 100%; }
+          .dashboard-shell header > div { min-width: 0; }
+          .dashboard-shell aside {
+            position: fixed !important;
+            left: 0; top: 56px; bottom: 0;
+            z-index: 45;
+            width: min(82vw, 280px) !important;
+            max-height: calc(100dvh - 56px);
+            box-shadow: 12px 0 36px rgba(0,0,0,.28);
+            transform: translateX(-105%);
+            transition: transform .22s ease;
+          }
+          .dashboard-shell aside.mobile-sidebar-open { transform: translateX(0); }
+          .dashboard-shell aside.mobile-sidebar-closed { transform: translateX(-105%); }
+          .dashboard-shell .mobile-sidebar-backdrop {
+            position: fixed; inset: 56px 0 0; z-index: 40;
+            background: rgba(0,0,0,.55); border: 0;
+          }
+          .dashboard-shell main img { max-width: 100%; }
+          .dashboard-shell main input,
+          .dashboard-shell main select,
+          .dashboard-shell main textarea { min-width: 0; max-width: 100%; }
+          .dashboard-shell .dv-scroll-x {
+            width: 100%; max-width: 100%; overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+          }
+        }
+        @media (max-width: 480px) {
+          .dashboard-shell main { padding: 10px; gap: 12px; }
+          .dashboard-shell main .text-3xl { font-size: 1.5rem; line-height: 2rem; }
+          .dashboard-shell main [class~="p-6"] { padding: 12px; }
+          .dashboard-shell main [class~="p-5"] { padding: 12px; }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .dashboard-shell main > div { animation: none; }
+          .dashboard-shell main [class*="border"] { transition: none; }
+        }
+      `}</style>
 
       {/* ═══ TOP BAR ═══ */}
       <header className={`border-b ${c.line} ${c.surface} sticky top-0 z-50 text-xs select-none h-14 flex items-stretch justify-between shrink-0`}>
         <div className="flex items-stretch">
-          <button onClick={() => setSidebarCollapsed(!sidebarCollapsed)} className={`px-4 border-r ${c.line} ${c.hover} flex items-center justify-center`}>
+          <button type="button" aria-label={sidebarCollapsed ? "Open navigation menu" : "Close navigation menu"} onClick={() => setSidebarCollapsed(!sidebarCollapsed)} className={`px-4 border-r ${c.line} ${c.hover} flex items-center justify-center`}>
             {sidebarCollapsed ? <PanelLeftOpen size={18} className={c.accentText} /> : <PanelLeftClose size={18} className={c.accentText} />}
           </button>
           <Link to="/" className={`flex items-center gap-3 px-4 sm:px-5 border-r ${c.line} ${c.hover} group`}>
@@ -456,12 +522,12 @@ export default function Dashboard() {
             <span className={c.textPrimary}>API: {backendStatus.toUpperCase()}</span>
           </div>
           <div className={`flex items-center gap-2 px-3 py-1 border ${c.line} ${c.surfaceRaised}`}>
-            <span className={isDark ? "text-[#d5ff38]" : "text-emerald-800"}>SUCCESS RATE:</span>
-            <span className="font-black text-emerald-500">94.8%</span>
+            <span className={isDark ? "text-[#d5ff38]" : "text-emerald-800"}>PASS RATE:</span>
+            <span className="font-black text-emerald-500">{successRate === null ? "—" : `${successRate.toFixed(1)}%`}</span>
           </div>
           <div className={`flex items-center gap-2 px-3 py-1 border ${c.line} ${c.surfaceRaised}`}>
-            <span className={c.textMuted}>INSPECTED TODAY:</span>
-            <span className={c.textPrimary}>{completedTasks.length + 1_422} COILS</span>
+            <span className={c.textMuted}>SESSION INSPECTIONS:</span>
+            <span className={c.textPrimary}>{completedTasks.length}</span>
           </div>
         </div>
 
@@ -484,17 +550,28 @@ export default function Dashboard() {
         </div>
       </header>
 
+      {/* Mobile sidebar backdrop */}
+      {!sidebarCollapsed && (
+        <button
+          type="button"
+          aria-label="Close navigation menu"
+          className="mobile-sidebar-backdrop md:hidden"
+          onClick={() => setSidebarCollapsed(true)}
+        />
+      )}
+
       {/* ═══ BODY ═══ */}
       <div className="flex-1 flex overflow-hidden">
 
         {/* ─── SIDEBAR ─── */}
-        <aside className={`border-r ${c.line} ${c.surface} flex flex-col justify-between transition-all duration-200 select-none shrink-0 ${sidebarCollapsed ? "w-14" : "w-60 sm:w-64"}`}>
+        <aside className={`border-r ${c.line} ${c.surface} flex flex-col justify-between transition-all duration-200 select-none shrink-0 md:translate-x-0 ${sidebarCollapsed ? "w-14 mobile-sidebar-closed" : "w-60 sm:w-64 mobile-sidebar-open"}`}>
           <div className="p-2 space-y-0.5 overflow-y-auto">
             {!sidebarCollapsed && <div className={`px-3 py-2 text-[9px] font-black uppercase tracking-[0.2em] ${c.textMuted}`}>CONTROL CHANNELS</div>}
             {TABS.map((tab) => {
               const active = activeTab === tab.id;
               return (
-                <button key={tab.id} onClick={() => setActiveTab(tab.id)}
+                <button key={tab.id} onClick={() => { setActiveTab(tab.id); if (window.innerWidth < 768) setSidebarCollapsed(true); }}
+                  title={sidebarCollapsed ? tab.label : undefined}
                   className={`w-full flex items-center justify-between p-3 text-xs tracking-wider uppercase transition-colors ${active ? c.activeItem : `${c.hover} ${c.textSecondary}`}`}>
                   <div className="flex items-center gap-3 min-w-0">
                     <span className={active ? (isDark ? "text-[#d5ff38]" : "text-emerald-800") : c.textMuted}>{tab.icon}</span>
@@ -536,155 +613,61 @@ export default function Dashboard() {
         </aside>
 
         {/* ═══ MAIN CONTENT ═══ */}
-        <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 flex flex-col gap-6">
+        <main className="min-w-0 flex-1 overflow-y-auto p-3 sm:p-5 lg:p-7 flex flex-col gap-5 lg:gap-6">
 
           {/* ═══════════ TAB: ANALYTICS ═══════════ */}
           {activeTab === "analytics" && (
             <div className="space-y-6">
               <div className={`p-5 border ${c.line} ${c.surface} flex flex-col sm:flex-row sm:items-center justify-between gap-4`}>
                 <div>
-                  <h2 className={`text-lg font-black uppercase tracking-tight font-sans ${c.textPrimary}`}>SUCCESS RATE & QUALITY YIELD INTELLIGENCE</h2>
-                  <p className={`text-xs uppercase mt-1 ${c.textMuted}`}>Continuous telemetry — Rolling Stands 01–04 · Backend: <span className={backendStatus === "online" ? "text-emerald-500" : "text-rose-500"}>{backendStatus}</span></p>
+                  <h2 className={`text-lg font-black uppercase tracking-tight font-sans ${c.textPrimary}`}>LIVE INSPECTION ANALYTICS</h2>
+                  <p className={`text-xs uppercase mt-1 ${c.textMuted}`}>Metrics are calculated from actual predictions in this browser session.</p>
                 </div>
-                <div className="flex items-center gap-3">
-                  <span className="px-3 py-1 bg-emerald-500/10 text-emerald-600 dark:text-[#d5ff38] border border-emerald-500/30 text-[10px] font-bold uppercase">LIVE DATASTREAM</span>
-                  <button onClick={() => setActiveTab("inspector")} className={`px-3.5 py-1.5 text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5 transition-colors border ${c.accentButton}`}>
-                    <Crosshair size={13} strokeWidth={2.5} />
-                    <span>LAUNCH INSPECTOR ↗</span>
-                  </button>
+                <div className="flex items-center gap-3 flex-wrap">
+                  <span className={`px-3 py-1 border text-[10px] font-bold uppercase ${backendStatus === "online" ? "bg-emerald-500/10 text-emerald-600 dark:text-[#d5ff38] border-emerald-500/30" : "bg-amber-500/10 text-amber-600 dark:text-amber-300 border-amber-500/30"}`}>{backendStatus === "online" ? "BACKEND CONNECTED" : backendStatus === "checking" ? "CHECKING API…" : "BACKEND OFFLINE"}</span>
+                  <button onClick={() => setActiveTab("inspector")} className={`px-3.5 py-1.5 text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5 border ${c.accentButton}`}><Crosshair size={13} />LAUNCH INSPECTOR ↗</button>
                 </div>
               </div>
 
-              {/* KPI Cards */}
-              <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                {/* Success Rate Gauge */}
-                <div className={`p-5 border ${c.line} ${c.surface} flex items-center justify-between`}>
-                  <div>
-                    <div className={`text-[10px] font-bold uppercase tracking-wider ${c.textMuted}`}>OVERALL SUCCESS RATE</div>
-                    <div className="text-3xl font-black font-sans mt-1 text-emerald-500">94.8%</div>
-                    <div className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold flex items-center gap-1 mt-1"><TrendingUp size={12} /><span>+1.4% vs LAST WEEK</span></div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+                {[
+                  { label: "ACTUAL INSPECTIONS", value: totalInspections.toLocaleString(), note: "Successful API predictions", icon: <ScanLine size={18} />, color: isDark ? "text-[#d5ff38]" : "text-emerald-700" },
+                  { label: "PASS RATE", value: successRate === null ? "—" : `${successRate.toFixed(1)}%`, note: `${passCount} passed · ${totalInspections} total`, icon: <ShieldCheck size={18} />, color: "text-emerald-500" },
+                  { label: "REJECTED", value: rejectCount.toLocaleString(), note: `${warningCount} warnings`, icon: <ShieldAlert size={18} />, color: "text-rose-500" },
+                  { label: "AVG INFERENCE", value: avgLatency === null ? "—" : `${avgLatency.toFixed(1)} ms`, note: "From backend latency_ms", icon: <Zap size={18} />, color: isDark ? "text-[#d5ff38]" : "text-emerald-700" },
+                ].map((kpi) => (
+                  <div key={kpi.label} className={`p-5 border ${c.line} ${c.surface}`}>
+                    <div className="flex items-center justify-between"><div className={`text-[10px] font-bold uppercase tracking-wider ${c.textMuted}`}>{kpi.label}</div><span className={kpi.color}>{kpi.icon}</span></div>
+                    <div className={`text-3xl font-black font-sans mt-3 ${kpi.color}`}>{kpi.value}</div>
+                    <div className={`text-[10px] mt-2 uppercase ${c.textMuted}`}>{kpi.note}</div>
                   </div>
-                  <div className="relative w-16 h-16 shrink-0">
-                    <svg className="w-full h-full -rotate-90" viewBox="0 0 100 100">
-                      <circle cx="50" cy="50" r="40" className="stroke-black/10 dark:stroke-white/10" strokeWidth="10" fill="transparent" />
-                      <circle cx="50" cy="50" r="40" className="stroke-emerald-500" strokeWidth="10" strokeDasharray="251.3" strokeDashoffset="13" strokeLinecap="round" fill="transparent" />
-                    </svg>
-                    <div className="absolute inset-0 flex items-center justify-center text-[11px] font-black font-sans">95%</div>
-                  </div>
+                ))}
+              </div>
+
+              <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+                <div className={`p-5 sm:p-6 border ${c.line} ${c.surface}`}>
+                  <div className="flex items-center justify-between gap-3 mb-5"><h3 className={`text-xs font-black uppercase tracking-wider ${c.textPrimary}`}>DETECTED DEFECT CLASSES</h3><span className={`text-[10px] uppercase ${c.textMuted}`}>{Object.values(defectCounts).reduce((a, b) => a + b, 0)} detections</span></div>
+                  {defectDistribution.length ? <div className="space-y-4">
+                    {defectDistribution.map(([name, count]) => {
+                      const total = defectDistribution.reduce((sum, item) => sum + item[1], 0);
+                      const pct = total ? (count / total) * 100 : 0;
+                      return <div key={name} className="space-y-1.5"><div className="flex justify-between gap-3 text-[10px] font-bold uppercase"><span className={c.textPrimary}>{prettyName(name)}</span><span className={c.textMuted}>{count} · {pct.toFixed(1)}%</span></div><div className="h-2.5 bg-black/10 dark:bg-white/10"><div className="h-full bg-[#d5ff38]" style={{ width: `${pct}%` }} /></div></div>;
+                    })}
+                  </div> : <div className={`py-12 text-center border border-dashed ${c.line}`}><ScanLine size={28} className={`mx-auto mb-3 ${c.textMuted}`} /><p className={`text-xs font-bold uppercase ${c.textPrimary}`}>No real detection data yet</p><p className={`text-[10px] mt-2 ${c.textMuted}`}>Inspect an image to populate this chart.</p><button onClick={() => setActiveTab("inspector")} className={`mt-4 px-4 py-2 text-[10px] font-black uppercase border ${c.accentButton}`}>Inspect an image</button></div>}
                 </div>
-                {/* Coils */}
-                <div className={`p-5 border ${c.line} ${c.surface}`}>
-                  <div className={`text-[10px] font-bold uppercase tracking-wider ${c.textMuted}`}>TOTAL COILS SCANNED</div>
-                  <div className={`text-3xl font-black font-sans mt-1 ${c.textPrimary}`}>{(completedTasks.length + 1_422).toLocaleString()}</div>
-                  <div className={`text-[10px] mt-1 uppercase ${c.textMuted}`}>Target: 1,500 Coils / Shift</div>
-                </div>
-                {/* Rejection Rate */}
-                <div className={`p-5 border ${c.line} ${c.surface}`}>
-                  <div className={`text-[10px] font-bold uppercase tracking-wider ${c.textMuted}`}>CRITICAL REJECTION RATE</div>
-                  <div className="text-3xl font-black font-sans mt-1 text-rose-500">5.2%</div>
-                  <div className="text-[10px] text-emerald-500 font-bold flex items-center gap-1 mt-1"><TrendingDown size={12} /><span>-0.8% REDUCTION</span></div>
-                </div>
-                {/* Latency */}
-                <div className={`p-5 border ${c.line} ${c.surface}`}>
-                  <div className={`text-[10px] font-bold uppercase tracking-wider ${c.textMuted}`}>INFERENCE LATENCY</div>
-                  <div className={`text-3xl font-black font-sans mt-1 ${isDark ? "text-[#d5ff38]" : "text-emerald-700"}`}>18.4 MS</div>
-                  <div className={`text-[10px] mt-1 uppercase ${c.textMuted}`}>SUB-FRAME 60 FPS INLINE</div>
+
+                <div className={`p-5 sm:p-6 border ${c.line} ${c.surface}`}>
+                  <div className="flex items-center justify-between gap-3 mb-5"><h3 className={`text-xs font-black uppercase tracking-wider ${c.textPrimary}`}>VERDICT BREAKDOWN</h3><span className={`text-[10px] uppercase ${c.textMuted}`}>Session totals</span></div>
+                  {totalInspections ? <div className="space-y-5">
+                    {[{label:"PASS",count:passCount,color:"bg-emerald-500"},{label:"WARNING",count:warningCount,color:"bg-amber-500"},{label:"REJECT",count:rejectCount,color:"bg-rose-500"}].map((item) => <div key={item.label} className="space-y-1.5"><div className="flex justify-between text-[10px] font-bold uppercase"><span className={c.textPrimary}>{item.label}</span><span className={c.textMuted}>{item.count} / {totalInspections}</span></div><div className="h-3 bg-black/10 dark:bg-white/10"><div className={`${item.color} h-full`} style={{width:`${(item.count/totalInspections)*100}%`}} /></div></div>)}
+                    <p className={`text-[10px] uppercase ${c.textMuted}`}>PASS rate is calculated as PASS inspections divided by all recorded inspections. This is not model accuracy.</p>
+                  </div> : <div className={`py-12 text-center border border-dashed ${c.line}`}><BarChart3 size={28} className={`mx-auto mb-3 ${c.textMuted}`} /><p className={`text-xs font-bold uppercase ${c.textPrimary}`}>Waiting for inspections</p><p className={`text-[10px] mt-2 ${c.textMuted}`}>Verdict statistics appear after an image is inspected.</p></div>}
                 </div>
               </div>
 
-              {/* Charts */}
-              <div className="grid lg:grid-cols-12 gap-6">
-                {/* 7-day trend */}
-                <div className={`lg:col-span-8 p-6 border ${c.line} ${c.surface} flex flex-col`}>
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-4 mb-4 border-b gap-2" style={{ borderColor: "inherit" }}>
-                    <div>
-                      <h3 className={`text-xs font-black uppercase tracking-wider ${c.textPrimary} flex items-center gap-2`}><TrendingUp size={14} className="text-emerald-500" /><span>7-DAY SUCCESS RATE TREND</span></h3>
-                      <p className={`text-[10px] uppercase mt-0.5 ${c.textMuted}`}>Daily coil pass rates — Rolling Line 04</p>
-                    </div>
-                    <div className="flex items-center gap-4 text-[10px] font-bold">
-                      <span className="flex items-center gap-1.5 text-emerald-500"><span className="w-2.5 h-2.5 bg-emerald-500 rounded-sm" />PASSED</span>
-                      <span className="flex items-center gap-1.5 text-rose-500"><span className="w-2.5 h-2.5 bg-rose-500 rounded-sm" />REJECTED</span>
-                    </div>
-                  </div>
-                  <div className="relative aspect-[21/9] w-full pt-4">
-                    <svg className="w-full h-full overflow-visible" viewBox="0 0 700 200">
-                      <defs>
-                        <linearGradient id="ag" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stopColor="#10b981" stopOpacity="0.35" />
-                          <stop offset="100%" stopColor="#10b981" stopOpacity="0.0" />
-                        </linearGradient>
-                      </defs>
-                      <line x1="0" y1="40"  x2="700" y2="40"  stroke="currentColor" className="opacity-10" strokeDasharray="3 3" />
-                      <line x1="0" y1="90"  x2="700" y2="90"  stroke="currentColor" className="opacity-10" strokeDasharray="3 3" />
-                      <line x1="0" y1="140" x2="700" y2="140" stroke="currentColor" className="opacity-10" strokeDasharray="3 3" />
-                      <line x1="0" y1="180" x2="700" y2="180" stroke="currentColor" className="opacity-20" />
-                      <polygon points="0,180 50,110 150,85 250,60 350,90 450,45 550,75 650,30 700,50 700,180 0,180" fill="url(#ag)" />
-                      <polyline points="50,110 150,85 250,60 350,90 450,45 550,75 650,30" fill="none" stroke="#10b981" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" />
-                      <polyline points="50,165 150,162 250,170 350,160 450,155 550,168 650,172" fill="none" stroke="#ef4444" strokeWidth="2" strokeDasharray="4 4" />
-                      {[{x:50,y:110,r:"94.3%"},{x:150,y:85,r:"94.7%"},{x:250,y:60,r:"96.5%"},{x:350,y:90,r:"94.8%"},{x:450,y:45,r:"93.9%"},{x:550,y:75,r:"95.2%"},{x:650,y:30,r:"95.1%"}].map((p, i) => (
-                        <g key={i}>
-                          <circle cx={p.x} cy={p.y} r="5" className="fill-[#10b981] stroke-black dark:stroke-white" strokeWidth="2" />
-                          <text x={p.x} y={p.y - 10} textAnchor="middle" className="text-[10px] font-bold fill-current font-mono">{p.r}</text>
-                        </g>
-                      ))}
-                    </svg>
-                    <div className="flex justify-between text-[10px] font-mono font-bold mt-2 uppercase opacity-60 px-4">
-                      {TREND_DAYS.map((d) => <span key={d.day}>{d.day} ({d.total})</span>)}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Shift bars */}
-                <div className={`lg:col-span-4 p-6 border ${c.line} ${c.surface} flex flex-col justify-between`}>
-                  <div className="pb-4 mb-4 border-b border-current/10">
-                    <h3 className={`text-xs font-black uppercase tracking-wider ${c.textPrimary}`}>SHIFT PRODUCTION</h3>
-                    <p className={`text-[10px] uppercase mt-0.5 ${c.textMuted}`}>Pass vs Reject by crew</p>
-                  </div>
-                  <div className="space-y-5">
-                    {[
-                      { shift: "SHIFT A (06:00 – 14:00)", pass: 520, reject: 32, rate: "94.2%" },
-                      { shift: "SHIFT B (14:00 – 22:00)", pass: 490, reject: 28, rate: "94.6%" },
-                      { shift: "SHIFT C (22:00 – 06:00)", pass: 418, reject: 14, rate: "96.7%" },
-                    ].map((s, i) => (
-                      <div key={i} className="space-y-1.5">
-                        <div className="flex justify-between text-xs font-bold uppercase">
-                          <span className={c.textPrimary}>{s.shift}</span>
-                          <span className="text-emerald-500 font-mono">{s.rate}</span>
-                        </div>
-                        <div className="w-full bg-black/10 dark:bg-white/10 h-3 flex overflow-hidden">
-                          <div className="bg-emerald-500 h-full" style={{ width: `${(s.pass / (s.pass + s.reject)) * 100}%` }} />
-                          <div className="bg-rose-500 h-full" style={{ width: `${(s.reject / (s.pass + s.reject)) * 100}%` }} />
-                        </div>
-                        <div className="flex justify-between text-[9px] font-mono opacity-50 uppercase">
-                          <span>Passed: {s.pass}</span><span>Rejected: {s.reject}</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              {/* Defect Breakdown */}
-              <div className={`p-6 border ${c.line} ${c.surface}`}>
-                <h3 className={`text-xs font-black uppercase tracking-wider mb-5 ${c.textPrimary}`}>NEU-DET DEFECT CLASS FREQUENCY</h3>
-                <div className="space-y-3">
-                  {[
-                    { name: "Crazing",        pct: 31.2, color: "#ff5436" },
-                    { name: "Scratches",      pct: 24.8, color: "#16a34a" },
-                    { name: "Inclusion",      pct: 19.1, color: "#ef4444" },
-                    { name: "Pitted Surface", pct: 13.5, color: "#0284c7" },
-                    { name: "Rolled-in Scale",pct: 7.4,  color: "#9333ea" },
-                    { name: "Patches",        pct: 4.0,  color: "#eab308" },
-                  ].map((d) => (
-                    <div key={d.name} className="flex items-center gap-4">
-                      <span className={`text-[10px] font-bold uppercase w-32 shrink-0 ${c.textPrimary}`}>{d.name}</span>
-                      <div className="flex-1 bg-black/10 dark:bg-white/10 h-2.5">
-                        <div className="h-full rounded-none" style={{ width: `${d.pct}%`, backgroundColor: d.color }} />
-                      </div>
-                      <span className="text-[10px] font-mono font-bold w-10 text-right" style={{ color: d.color }}>{d.pct}%</span>
-                    </div>
-                  ))}
-                </div>
+              <div className={`border ${c.line} ${c.surface}`}>
+                <div className="p-5 border-b border-current/10 flex flex-col sm:flex-row sm:items-center justify-between gap-3"><div><h3 className={`text-xs font-black uppercase tracking-wider ${c.textPrimary}`}>RECENT REAL INSPECTIONS</h3><p className={`text-[10px] mt-1 uppercase ${c.textMuted}`}>Stored for this browser session</p></div><button onClick={() => setActiveTab("history")} className={`text-[10px] font-black uppercase border px-3 py-2 ${c.line} ${c.hover}`}>View history ↗</button></div>
+                {completedTasks.length ? <div className="divide-y divide-current/10">{completedTasks.slice(0,5).map((item) => <div key={item.id} className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3"><div className="min-w-0"><p className={`text-xs font-bold truncate ${c.textPrimary}`}>{item.specimen}</p><p className={`text-[10px] mt-1 uppercase ${c.textMuted}`}>{item.time} · {item.defectCount} detections · {item.latency}</p></div><span className={`self-start sm:self-auto px-3 py-1 text-[10px] font-black ${item.verdict === "PASS" ? "bg-emerald-600 text-white" : item.verdict === "REJECT" ? "bg-rose-600 text-white" : "bg-amber-500 text-black"}`}>{item.verdict}</span></div>)}</div> : <div className={`p-8 text-center text-xs uppercase ${c.textMuted}`}>No inspections recorded yet. Upload and inspect an image to show real results here.</div>}
               </div>
             </div>
           )}
@@ -1153,10 +1136,10 @@ export default function Dashboard() {
               </div>
 
               {/* Stats Row */}
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
                 {[
-                  { label: "TOTAL INSPECTIONS", value: (profile.totalInspections + completedTasks.length).toLocaleString() },
-                  { label: "AVG ACCURACY",       value: profile.avgAccuracy },
+                  { label: "SESSION INSPECTIONS", value: completedTasks.length.toLocaleString() },
+                  { label: "AVG INFERENCE",       value: avgLatency === null ? "—" : `${avgLatency.toFixed(1)} ms` },
                   { label: "EMPLOYEE ID",         value: profile.employeeId },
                 ].map((s) => (
                   <div key={s.label} className={`p-5 border ${c.line} ${c.surface} text-center`}>

@@ -1,400 +1,373 @@
+
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import {
+  ScanLine,
   ArrowLeft,
   ArrowRight,
-  ArrowUpRight,
   Eye,
   EyeOff,
-  Lock,
-  Mail,
-  ScanLine,
-  Sun,
-  Moon,
-  Terminal,
-  User,
-  Zap,
-  CheckCircle2,
+  ShieldCheck,
+  Activity,
+  UserRound,
 } from "lucide-react";
-import { useTheme } from "../context/ThemeContext.jsx";
 
 export default function Signup() {
   const [showPassword, setShowPassword] = useState(false);
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-  const [message, setMessage] = useState("");
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
+  const [form, setForm] = useState({
+    name: "",
+    email: "",
+    password: "",
+    confirmPassword: "",
+  });
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  const navigate = useNavigate();
-  const { isDark, toggleTheme } = useTheme();
+  const handleChange = (e) => {
+    setForm({ ...form, [e.target.name]: e.target.value });
+    setError("");
+    setSuccess("");
+  };
 
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError("");
+    setSuccess("");
 
-  const c = isDark
-    ? {
-        bg: "#0f100c",
-        surface: "#171813",
-        surfaceRaised: "#20211a",
-        line: "#2a2c22",
-        lineLight: "#37392d",
-        text: "#f5f4ed",
-        muted: "#8c8e80",
-        faint: "#55574c",
-        lime: "#d5ff38",
-        signal: "#ff5436",
-      }
-    : {
-        bg: "#f4f3ec",
-        surface: "#eae8de",
-        surfaceRaised: "#dedbce",
-        line: "#d0cebf",
-        lineLight: "#bebcb0",
-        text: "#151611",
-        muted: "#6e7062",
-        faint: "#9ea090",
-        lime: "#4e6600",
-        signal: "#e0371a",
-      };
-
-  function handleSubmit(event) {
-    event.preventDefault();
-    if (password !== confirmPassword) {
-      setMessage("ERROR: PASSKEYS DO NOT MATCH. PLEASE VERIFY ENTRIES.");
+    if (!form.name.trim() || !form.email.trim() ||
+        !form.password || !form.confirmPassword) {
+      setError("Please complete all required fields.");
       return;
     }
 
-    setMessage("OPERATOR COMMISSIONED SUCCESSFULLY. REDIRECTING TO STUDIO...");
-    setTimeout(() => {
-      navigate("/dashboard");
-    }, 800);
-  }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) {
+      setError("Please enter a valid work email address.");
+      return;
+    }
 
-  function handleDemoAccess() {
-    navigate("/dashboard");
-  }
+    if (form.password.length < 8) {
+      setError("Password must contain at least 8 characters.");
+      return;
+    }
+
+    if (form.password !== form.confirmPassword) {
+      setError("Passwords do not match.");
+      return;
+    }
+
+    if (!acceptedTerms) {
+      setError("Please accept the terms to continue.");
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      // Connect your backend registration API here.
+      // Example:
+      // await axios.post("/api/auth/register", {
+      //   name: form.name.trim(),
+      //   email: form.email.trim(),
+      //   password: form.password,
+      // });
+      //
+      // On success, navigate to login or verify email.
+
+      setError("Registration API is not connected yet.");
+    } catch {
+      setError("Unable to create your account. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const inputClass =
+    "w-full border border-[#37392d] bg-[#11120e] px-4 py-3.5 pr-12 text-sm text-[#f5f4ed] outline-none transition placeholder:text-[#55574c] focus:border-[#d5ff38]";
 
   return (
-    <div
-      style={{
-        backgroundColor: c.bg,
-        color: c.text,
-        "--line": c.line,
-        "--line-light": c.lineLight,
-        "--lime": c.lime,
-        "--signal": c.signal,
-      }}
-      className="min-h-screen selection:bg-[#d5ff38] selection:text-black font-mono transition-colors duration-200 flex flex-col justify-between"
-    >
+    <main className="min-h-screen bg-[#0f100c] font-mono text-[#f5f4ed]">
       <style>{`
-        .blueprint-grid {
-          background-size: 24px 24px;
-          background-image: 
-            linear-gradient(to right, var(--line) 1px, transparent 1px),
-            linear-gradient(to bottom, var(--line) 1px, transparent 1px);
-        }
-        .brutalist-outline {
-          color: transparent;
-          -webkit-text-stroke: 1.5px currentColor;
+        .signup-grid {
+          background-image:
+            linear-gradient(to right, #2a2c2218 1px, transparent 1px),
+            linear-gradient(to bottom, #2a2c2218 1px, transparent 1px);
+          background-size: 28px 28px;
         }
       `}</style>
 
-      {/* TOP STATUS BAR */}
-      <div
-        className="border-b text-[10px] uppercase tracking-[0.18em] px-4 sm:px-8 py-2 flex items-center justify-between"
-        style={{ borderColor: c.line, backgroundColor: c.surface, color: c.muted }}
-      >
-        <div className="flex items-center gap-4">
-          <Link
-            to="/"
-            className="flex items-center gap-2 font-bold hover:text-[#d5ff38] transition-colors"
-          >
-            <ArrowLeft size={13} strokeWidth={2.5} />
-            <span>RETURN TO ARCHIVE [ ESC ]</span>
-          </Link>
-          <span className="hidden sm:inline opacity-30">|</span>
-          <span className="hidden sm:inline">COMMISSIONING // REGISTRATION CONSOLE</span>
-        </div>
+      <header className="flex items-center justify-between border-b border-[#2a2c22] px-5 py-5 sm:px-8">
+        <Link to="/" className="flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center bg-[#d5ff38] text-black">
+            <ScanLine size={23} />
+          </div>
+          <div>
+            <h1 className="font-sans text-lg font-black tracking-tight">
+              DEFECTVISION<span className="text-[#ff5436]">.</span>
+            </h1>
+            <p className="text-[9px] tracking-[0.2em] text-[#8c8e80]">
+              INDUSTRIAL CV ARCHIVE
+            </p>
+          </div>
+        </Link>
 
-        <div className="flex items-center gap-4">
-          <span className="flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-full bg-[#d5ff38] animate-pulse" />
-            <span className="hidden sm:inline">SYSTEM:</span> READY
-          </span>
-          <button
-            onClick={toggleTheme}
-            className="border px-2 py-0.5 text-[9px] font-bold uppercase transition-colors hover:bg-black/5 dark:hover:bg-white/5"
-            style={{ borderColor: c.line }}
-          >
-            {isDark ? "LIGHT" : "DARK"}
-          </button>
-        </div>
-      </div>
+        <Link
+          to="/"
+          className="flex items-center gap-2 text-[10px] font-bold tracking-wider text-[#8c8e80] transition hover:text-[#d5ff38] sm:text-xs"
+        >
+          <ArrowLeft size={14} />
+          BACK TO HOME
+        </Link>
+      </header>
 
-      {/* MAIN CONTAINER */}
-      <main className="flex-1 flex items-center justify-center p-4 sm:p-8 lg:p-12">
-        <div className="w-full max-w-5xl border grid lg:grid-cols-12 shadow-2xl" style={{ borderColor: c.line, backgroundColor: c.surface }}>
-          {/* LEFT TELEMETRY COLUMN */}
-          <div
-            className="lg:col-span-5 p-8 sm:p-12 flex flex-col justify-between border-b lg:border-b-0 lg:border-r relative overflow-hidden"
-            style={{ borderColor: c.line, backgroundColor: isDark ? "#12130e" : "#e4e2d6" }}
-          >
-            <div className="blueprint-grid absolute inset-0 pointer-events-none opacity-20" />
+      <section className="signup-grid flex min-h-[calc(100vh-81px)] items-center justify-center px-4 py-10 sm:px-6">
+        <div className="grid w-full max-w-5xl overflow-hidden border border-[#2a2c22] bg-[#11120e] lg:grid-cols-2">
+          <div className="relative hidden flex-col justify-between overflow-hidden border-r border-[#2a2c22] bg-[#171813] p-10 lg:flex xl:p-12">
+            <div className="absolute -right-20 top-36 h-72 w-72 rounded-full border border-[#d5ff38]/10" />
+            <div className="absolute -right-8 top-48 h-48 w-48 rounded-full border border-[#d5ff38]/20" />
 
-            <div className="relative z-10">
-              {/* Brand */}
-              <Link to="/" className="flex items-center gap-3 group mb-12">
-                <div className="w-9 h-9 bg-[#d5ff38] text-black font-black flex items-center justify-center shrink-0 tracking-tighter group-hover:rotate-90 transition-transform">
-                  <ScanLine size={20} strokeWidth={2.4} />
-                </div>
-                <div>
-                  <span className="text-sm font-black tracking-[-0.04em] block uppercase font-sans">
-                    DEFECTVISION<span style={{ color: c.signal }}>.</span>
-                  </span>
-                  <span className="text-[8px] tracking-[0.22em] uppercase block opacity-60">
-                    OPERATOR COMMISSIONING
-                  </span>
-                </div>
-              </Link>
+            <div className="relative">
+              <span className="inline-block border border-[#d5ff38]/30 bg-[#d5ff38]/10 px-3 py-2 text-[10px] font-bold tracking-widest text-[#d5ff38]">
+                OPERATOR REGISTRATION // 002
+              </span>
 
-              <div className="space-y-4">
-                <div className="inline-block px-2 py-0.5 text-[9px] font-bold bg-[#d5ff38] text-black uppercase">
-                  ENROLLMENT // NEW OPERATOR
-                </div>
+              <h2 className="mt-10 font-sans text-6xl font-black uppercase leading-[0.88] tracking-[-0.07em] xl:text-7xl">
+                BUILD
+                <br />
+                YOUR
+                <br />
+                <span className="text-transparent [-webkit-text-stroke:1px_#f5f4ed]">
+                  VISION
+                </span>
+                <span className="text-[#ff5436]">.</span>
+              </h2>
 
-                <h1 className="text-4xl sm:text-5xl font-black tracking-tight leading-[0.9] font-sans uppercase">
-                  REGISTER<br />
-                  <span className="brutalist-outline">OPERATOR</span>
-                  <span style={{ color: c.signal }}>.</span>
-                </h1>
-
-                <p className="text-xs opacity-70 leading-relaxed font-mono uppercase pt-2">
-                  Create operator credentials to unlock continuous line-scan inspection, bounding box telemetry, and automated coil reject gating.
-                </p>
-              </div>
-
-              {/* Station perks checklist */}
-              <div className="mt-8 space-y-2.5 text-xs opacity-80 pt-4 border-t" style={{ borderColor: c.line }}>
-                <div className="flex items-center gap-2">
-                  <CheckCircle2 size={14} className="text-[#d5ff38] shrink-0" />
-                  <span>Real-time YOLO11 model inference</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <CheckCircle2 size={14} className="text-[#d5ff38] shrink-0" />
-                  <span>Sub-millimeter bounding box coordinates</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <CheckCircle2 size={14} className="text-[#d5ff38] shrink-0" />
-                  <span>6 Surface defect category classification</span>
-                </div>
-              </div>
+              <p className="mt-7 max-w-sm text-xs leading-6 text-[#8c8e80]">
+                Create your operator account and get ready to inspect steel
+                surface defects, review detection results, and manage your
+                quality-control workflow.
+              </p>
             </div>
 
-            <div className="relative z-10 mt-12 pt-6 border-t font-mono text-[10px] space-y-2 opacity-75" style={{ borderColor: c.line }}>
-              <div className="flex justify-between">
-                <span className="opacity-50">SECURITY PROTOCOL:</span>
-                <span className="text-[#d5ff38]">DIN EN 10163</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="opacity-50">ROLE PRIVILEGE:</span>
-                <span>METALLURGICAL QA LEAD</span>
+            <div className="relative mt-12 space-y-5">
+              {[
+                "Access your inspection workspace",
+                "Analyze surface defect classifications",
+                "Review detection results in one place",
+              ].map((item, index) => (
+                <div key={item} className="flex items-center gap-3">
+                  <span className="flex h-7 w-7 shrink-0 items-center justify-center border border-[#37392d] text-[10px] font-bold text-[#d5ff38]">
+                    0{index + 1}
+                  </span>
+                  <span className="text-[10px] text-[#b8b9ad]">{item}</span>
+                </div>
+              ))}
+
+              <div className="flex items-center gap-2 border-t border-[#37392d] pt-5 text-[9px] tracking-widest text-[#55574c]">
+                <ShieldCheck size={14} className="text-[#d5ff38]" />
+                DEFECTVISION.AI // SECURE REGISTRATION
               </div>
             </div>
           </div>
 
-          {/* RIGHT REGISTRATION FORM */}
-          <div className="lg:col-span-7 p-8 sm:p-12 flex flex-col justify-between">
-            <div>
-              {/* Header */}
-              <div className="flex items-center justify-between pb-6 mb-8 border-b" style={{ borderColor: c.line }}>
-                <span className="text-xs font-bold uppercase tracking-widest text-[#d5ff38] flex items-center gap-2">
-                  <Terminal size={14} />
-                  <span>OPERATOR REGISTRATION CONSOLE</span>
-                </span>
-                <span className="text-[9px] opacity-40 font-mono">NODE: REG-01</span>
-              </div>
-
-              <form onSubmit={handleSubmit} className="space-y-5">
-                {/* Full Name */}
-                <div>
-                  <label
-                    htmlFor="signup-name"
-                    className="block text-[10px] font-bold uppercase tracking-wider mb-2 opacity-70"
-                  >
-                    [ 01 ] OPERATOR FULL NAME:
-                  </label>
-                  <div
-                    className="flex items-center border transition-colors focus-within:border-[#d5ff38]"
-                    style={{ borderColor: c.line, backgroundColor: isDark ? "#0c0d09" : "#ffffff" }}
-                  >
-                    <span className="px-3.5 opacity-40">
-                      <User size={15} />
-                    </span>
-                    <input
-                      id="signup-name"
-                      name="name"
-                      type="text"
-                      required
-                      value={name}
-                      onChange={(e) => setName(e.target.value)}
-                      placeholder="e.g. Alex Mercer"
-                      className="w-full py-3 pr-4 bg-transparent text-xs font-mono outline-none placeholder:opacity-30"
-                    />
-                  </div>
-                </div>
-
-                {/* Email */}
-                <div>
-                  <label
-                    htmlFor="signup-email"
-                    className="block text-[10px] font-bold uppercase tracking-wider mb-2 opacity-70"
-                  >
-                    [ 02 ] STATION EMAIL / IDENTIFIER:
-                  </label>
-                  <div
-                    className="flex items-center border transition-colors focus-within:border-[#d5ff38]"
-                    style={{ borderColor: c.line, backgroundColor: isDark ? "#0c0d09" : "#ffffff" }}
-                  >
-                    <span className="px-3.5 opacity-40">
-                      <Mail size={15} />
-                    </span>
-                    <input
-                      id="signup-email"
-                      name="email"
-                      type="email"
-                      required
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      placeholder="operator@mill-stand.internal"
-                      className="w-full py-3 pr-4 bg-transparent text-xs font-mono outline-none placeholder:opacity-30"
-                    />
-                  </div>
-                </div>
-
-                {/* Password & Confirm Grid */}
-                <div className="grid sm:grid-cols-2 gap-4">
-                  <div>
-                    <label
-                      htmlFor="signup-password"
-                      className="block text-[10px] font-bold uppercase tracking-wider mb-2 opacity-70"
-                    >
-                      [ 03 ] PASSKEY:
-                    </label>
-                    <div
-                      className="flex items-center border transition-colors focus-within:border-[#d5ff38]"
-                      style={{ borderColor: c.line, backgroundColor: isDark ? "#0c0d09" : "#ffffff" }}
-                    >
-                      <span className="px-3 opacity-40">
-                        <Lock size={14} />
-                      </span>
-                      <input
-                        id="signup-password"
-                        name="password"
-                        type={showPassword ? "text" : "password"}
-                        required
-                        minLength={8}
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                        placeholder="Min 8 chars"
-                        className="w-full py-3 pr-2 bg-transparent text-xs font-mono outline-none placeholder:opacity-30"
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label
-                      htmlFor="signup-confirm"
-                      className="block text-[10px] font-bold uppercase tracking-wider mb-2 opacity-70"
-                    >
-                      [ 04 ] CONFIRM:
-                    </label>
-                    <div
-                      className="flex items-center border transition-colors focus-within:border-[#d5ff38]"
-                      style={{ borderColor: c.line, backgroundColor: isDark ? "#0c0d09" : "#ffffff" }}
-                    >
-                      <span className="px-3 opacity-40">
-                        <Lock size={14} />
-                      </span>
-                      <input
-                        id="signup-confirm"
-                        name="confirmPassword"
-                        type={showPassword ? "text" : "password"}
-                        required
-                        minLength={8}
-                        value={confirmPassword}
-                        onChange={(e) => setConfirmPassword(e.target.value)}
-                        placeholder="Re-enter"
-                        className="w-full py-3 pr-2 bg-transparent text-xs font-mono outline-none placeholder:opacity-30"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowPassword(!showPassword)}
-                        className="px-2.5 opacity-50 hover:opacity-100"
-                      >
-                        {showPassword ? <EyeOff size={14} /> : <Eye size={14} />}
-                      </button>
-                    </div>
-                  </div>
-                </div>
-
-                {message && (
-                  <div
-                    className={`p-3 border text-xs font-mono uppercase ${
-                      message.startsWith("ERROR")
-                        ? "bg-[#ff5436]/10 text-[#ff5436] border-[#ff5436]/40"
-                        : "bg-[#d5ff38]/10 text-[#d5ff38] border-[#d5ff38]/40"
-                    }`}
-                  >
-                    {message}
-                  </div>
-                )}
-
-                <button
-                  type="submit"
-                  className="w-full py-4 bg-[#d5ff38] text-black font-black text-xs uppercase tracking-widest hover:bg-[#c4f024] transition-all flex items-center justify-center gap-3 shadow-lg hover:-translate-y-0.5 mt-2"
-                >
-                  <span>COMMISSION OPERATOR ACCOUNT</span>
-                  <ArrowRight size={15} strokeWidth={2.5} />
-                </button>
-              </form>
-
-              {/* Instant Demo Access */}
-              <div className="mt-4">
-                <button
-                  type="button"
-                  onClick={handleDemoAccess}
-                  className="w-full py-3 border text-xs font-bold uppercase tracking-wider hover:bg-black/5 dark:hover:bg-white/5 transition-colors flex items-center justify-center gap-2 text-white/70 hover:text-white"
-                  style={{ borderColor: c.line }}
-                >
-                  <Zap size={14} className="text-[#d5ff38]" />
-                  <span>BYPASS // TEST DEMO STUDIO DIRECTLY</span>
-                  <ArrowUpRight size={14} />
-                </button>
-              </div>
+          <div className="p-6 sm:p-10 lg:p-11 xl:p-12">
+            <div className="mb-6 flex items-center gap-2 text-[10px] font-bold tracking-[0.2em] text-[#d5ff38]">
+              <Activity size={15} />
+              NEW OPERATOR / REGISTER
             </div>
 
-            {/* Bottom Link */}
-            <div className="pt-8 mt-8 border-t flex flex-col sm:flex-row items-center justify-between gap-4 text-xs" style={{ borderColor: c.line }}>
-              <span className="opacity-60 text-[11px]">ALREADY AN OPERATOR?</span>
+            <h2 className="font-sans text-4xl font-black uppercase tracking-[-0.06em] sm:text-5xl">
+              CREATE
+              <br />
+              ACCOUNT<span className="text-[#ff5436]">.</span>
+            </h2>
+
+            <p className="mt-3 text-xs leading-6 text-[#8c8e80]">
+              Register to access the industrial inspection platform.
+            </p>
+
+            <form onSubmit={handleSubmit} className="mt-7 space-y-4">
+              <div>
+                <label
+                  htmlFor="signup-name"
+                  className="mb-2 block text-[10px] font-bold tracking-widest text-[#b8b9ad]"
+                >
+                  FULL NAME *
+                </label>
+                <div className="relative">
+                  <input
+                    id="signup-name"
+                    className={inputClass}
+                    type="text"
+                    name="name"
+                    placeholder="Enter your full name"
+                    value={form.name}
+                    onChange={handleChange}
+                    autoComplete="name"
+                    maxLength={100}
+                    required
+                  />
+                  <UserRound
+                    size={17}
+                    className="absolute right-4 top-1/2 -translate-y-1/2 text-[#55574c]"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label
+                  htmlFor="signup-email"
+                  className="mb-2 block text-[10px] font-bold tracking-widest text-[#b8b9ad]"
+                >
+                  WORK EMAIL *
+                </label>
+                <input
+                  id="signup-email"
+                  className={inputClass}
+                  type="email"
+                  name="email"
+                  placeholder="operator@company.com"
+                  value={form.email}
+                  onChange={handleChange}
+                  autoComplete="email"
+                  required
+                />
+              </div>
+
+              <div>
+                <label
+                  htmlFor="signup-password"
+                  className="mb-2 block text-[10px] font-bold tracking-widest text-[#b8b9ad]"
+                >
+                  PASSWORD *
+                </label>
+                <div className="relative">
+                  <input
+                    id="signup-password"
+                    className={inputClass}
+                    type={showPassword ? "text" : "password"}
+                    name="password"
+                    placeholder="Minimum 8 characters"
+                    value={form.password}
+                    onChange={handleChange}
+                    autoComplete="new-password"
+                    minLength={8}
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-4 top-1/2 -translate-y-1/2 text-[#8c8e80] hover:text-[#d5ff38]"
+                    aria-label={showPassword ? "Hide password" : "Show password"}
+                  >
+                    {showPassword ? <EyeOff size={17} /> : <Eye size={17} />}
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label
+                  htmlFor="signup-confirm"
+                  className="mb-2 block text-[10px] font-bold tracking-widest text-[#b8b9ad]"
+                >
+                  CONFIRM PASSWORD *
+                </label>
+                <div className="relative">
+                  <input
+                    id="signup-confirm"
+                    className={inputClass}
+                    type={showConfirmPassword ? "text" : "password"}
+                    name="confirmPassword"
+                    placeholder="Re-enter your password"
+                    value={form.confirmPassword}
+                    onChange={handleChange}
+                    autoComplete="new-password"
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setShowConfirmPassword(!showConfirmPassword)
+                    }
+                    className="absolute right-4 top-1/2 -translate-y-1/2 text-[#8c8e80] hover:text-[#d5ff38]"
+                    aria-label={
+                      showConfirmPassword
+                        ? "Hide confirm password"
+                        : "Show confirm password"
+                    }
+                  >
+                    {showConfirmPassword ? (
+                      <EyeOff size={17} />
+                    ) : (
+                      <Eye size={17} />
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              <label className="flex cursor-pointer items-start gap-3 pt-1 text-[10px] leading-5 text-[#8c8e80]">
+                <input
+                  type="checkbox"
+                  checked={acceptedTerms}
+                  onChange={(e) => setAcceptedTerms(e.target.checked)}
+                  className="mt-1 h-4 w-4 shrink-0 accent-[#d5ff38]"
+                />
+                <span>
+                  I agree to the platform's terms of service and privacy policy.
+                </span>
+              </label>
+
+              {error && (
+                <p
+                  role="alert"
+                  className="border border-[#ff5436]/40 bg-[#ff5436]/10 p-3 text-xs leading-5 text-[#ff8b76]"
+                >
+                  {error}
+                </p>
+              )}
+
+              {success && (
+                <p
+                  role="status"
+                  className="border border-[#d5ff38]/40 bg-[#d5ff38]/10 p-3 text-xs leading-5 text-[#d5ff38]"
+                >
+                  {success}
+                </p>
+              )}
+
+              <button
+                type="submit"
+                disabled={loading}
+                className="flex w-full items-center justify-between bg-[#d5ff38] px-5 py-4 text-xs font-black tracking-widest text-black transition hover:bg-[#c4f024] disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <span>
+                  {loading ? "CREATING ACCOUNT..." : "CREATE OPERATOR ACCOUNT"}
+                </span>
+                <ArrowRight size={18} />
+              </button>
+            </form>
+
+            <div className="mt-7 border-t border-[#2a2c22] pt-6 text-center">
+              <p className="text-xs text-[#8c8e80]">
+                Already registered?
+              </p>
               <Link
                 to="/login"
-                className="font-bold text-[#d5ff38] hover:underline uppercase text-xs tracking-wider flex items-center gap-1.5"
+                className="mt-3 inline-flex items-center gap-2 text-xs font-bold tracking-widest text-[#d5ff38] hover:underline"
               >
-                <span>OPERATOR SIGN IN</span>
-                <ArrowRight size={13} />
+                SIGN IN INSTEAD
+                <ArrowRight size={14} />
               </Link>
             </div>
           </div>
         </div>
-      </main>
+      </section>
 
-      {/* FOOTER */}
-      <footer
-        className="border-t text-[10px] uppercase tracking-widest px-4 sm:px-8 py-3 flex flex-col sm:flex-row items-center justify-between gap-2"
-        style={{ borderColor: c.line, backgroundColor: c.surface, color: c.muted }}
-      >
-        <span>DEFECTVISION AI // AUTOMATED METALLURGICAL QUALITY ASSURANCE</span>
-        <span>© 2026 ARCHIVE REVISION 04</span>
+      <footer className="border-t border-[#2a2c22] px-5 py-4 text-center text-[9px] tracking-widest text-[#55574c]">
+        © 2026 DEFECTVISION.AI — ALL RIGHTS RESERVED
       </footer>
-    </div>
+    </main>
   );
 }
