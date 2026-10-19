@@ -178,7 +178,16 @@ export default function Dashboard() {
   // ── Tasks
   const [pendingTasks, setPendingTasks] = useState(INITIAL_QUEUE);
   const [completedTasks, setCompletedTasks] = useState(() => {
-    try { return JSON.parse(sessionStorage.getItem("defectvision-inspections") || "[]"); } catch { return INITIAL_COMPLETED; }
+    // Only keep records explicitly written by the real backend prediction flow.
+    // This filters legacy/demo entries previously stored under the same key.
+    try {
+      const saved = JSON.parse(sessionStorage.getItem("defectvision-inspections") || "[]");
+      return Array.isArray(saved)
+        ? saved.filter((item) => item && item.source === "backend-prediction")
+        : INITIAL_COMPLETED;
+    } catch {
+      return INITIAL_COMPLETED;
+    }
   });
   const [isProcessingQueue, setIsProcessingQueue] = useState(false);
   const [historySearch, setHistorySearch] = useState("");
@@ -331,6 +340,7 @@ export default function Dashboard() {
     const detectedVerdict = verdict || calculateVerdict(detections).status;
     const record = {
       id: `INS-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      source: "backend-prediction",
       specimen: filename,
       timestamp: new Date().toISOString(),
       time: new Date().toLocaleString([], { dateStyle: "short", timeStyle: "short" }),
