@@ -1,20 +1,15 @@
-import { useEffect, useState, useRef } from "react";
-import { Link } from "react-router-dom";
+import React, { useEffect, useState, useRef, useCallback } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import {
   Activity,
   AlertTriangle,
   ArrowDownRight,
   ArrowLeft,
-  ArrowRight,
   ArrowUpRight,
   BarChart3,
-  Calendar,
   Check,
   CheckCircle2,
   ChevronDown,
-  ChevronLeft,
-  ChevronRight,
-  CircleDot,
   Clock,
   Cpu,
   Crosshair,
@@ -24,214 +19,91 @@ import {
   FileText,
   Filter,
   Flame,
-  FolderOpen,
   Gauge,
   History,
   ImagePlus,
+  Images,
   Layers,
-  LineChart,
   ListTodo,
   LoaderCircle,
-  Maximize2,
-  Menu,
   Moon,
   PanelLeftClose,
   PanelLeftOpen,
   Pause,
-  Percent,
   Play,
   RefreshCw,
-  RotateCcw,
   Scan,
   ScanLine,
   Search,
+  Settings,
   ShieldAlert,
   ShieldCheck,
   Sliders,
   Sparkles,
   Sun,
   Target,
-  Terminal,
   Trash2,
   TrendingDown,
   TrendingUp,
   Upload,
   User,
-  Workflow,
   X,
   Zap,
 } from "lucide-react";
-import { inspectImage } from "../services/api.js";
+import { inspectImage, inspectBatch, getBackendHealth } from "../services/api.js";
 import { useTheme } from "../context/ThemeContext.jsx";
 
-const MAX_FILE_SIZE = 10 * 1024 * 1024;
-
-const DEFECTS = [
-  "crazing",
-  "inclusion",
-  "patches",
-  "pitted_surface",
-  "rolled-in_scale",
-  "scratches",
-];
+const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
 
 const SAMPLE_DEFECTS = [
-  { name: "Crazing", file: "crazing_241.jpg", code: "01", color: "#ff5436" },
-  { name: "Inclusion", file: "inclusion_241.jpg", code: "02", color: "#ff5436" },
-  { name: "Patches", file: "patches_241.jpg", code: "03", color: "#eab308" },
-  { name: "Pitted", file: "pitted_surface_241.jpg", code: "04", color: "#0284c7" },
-  { name: "Scale", file: "rolled-in_scale_241.jpg", code: "05", color: "#9333ea" },
-  { name: "Scratches", file: "scratches_241.jpg", code: "06", color: "#16a34a" },
+  { name: "Crazing",   file: "crazing_241.jpg",        code: "01", color: "#ff5436" },
+  { name: "Inclusion", file: "inclusion_241.jpg",      code: "02", color: "#ff5436" },
+  { name: "Patches",   file: "patches_241.jpg",        code: "03", color: "#eab308" },
+  { name: "Pitted",    file: "pitted_surface_241.jpg", code: "04", color: "#0284c7" },
+  { name: "Scale",     file: "rolled-in_scale_241.jpg",code: "05", color: "#9333ea" },
+  { name: "Scratches", file: "scratches_241.jpg",      code: "06", color: "#16a34a" },
 ];
 
 const INITIAL_QUEUE = [
-  {
-    id: "TASK-8841",
-    coilId: "COIL-HT-902",
-    line: "Roughing Stand 02",
-    sample: "crazing_241.jpg",
-    status: "PROCESSING",
-    progress: 72,
-    priority: "HIGH",
-    time: "12:02 PM",
-    heatNumber: "H-44910",
-  },
-  {
-    id: "TASK-8842",
-    coilId: "COIL-HT-903",
-    line: "Continuous Mill 04",
-    sample: "inclusion_241.jpg",
-    status: "PENDING",
-    progress: 0,
-    priority: "CRITICAL",
-    time: "12:05 PM",
-    heatNumber: "H-44911",
-  },
-  {
-    id: "TASK-8843",
-    coilId: "COIL-CL-311",
-    line: "Cold Finishing Stand",
-    sample: "patches_241.jpg",
-    status: "PENDING",
-    progress: 0,
-    priority: "NORMAL",
-    time: "12:08 PM",
-    heatNumber: "H-44912",
-  },
-  {
-    id: "TASK-8844",
-    coilId: "COIL-CL-312",
-    line: "Pickling Entry Gate",
-    sample: "scratches_241.jpg",
-    status: "QUEUED",
-    progress: 0,
-    priority: "NORMAL",
-    time: "12:10 PM",
-    heatNumber: "H-44913",
-  },
+  { id: "TASK-8841", coilId: "COIL-HT-902", line: "Roughing Stand 02",    sample: "crazing_241.jpg",        status: "PROCESSING", progress: 72, priority: "HIGH",     time: "12:02 PM", heatNumber: "H-44910" },
+  { id: "TASK-8842", coilId: "COIL-HT-903", line: "Continuous Mill 04",   sample: "inclusion_241.jpg",      status: "PENDING",    progress: 0,  priority: "CRITICAL",  time: "12:05 PM", heatNumber: "H-44911" },
+  { id: "TASK-8843", coilId: "COIL-CL-311", line: "Cold Finishing Stand", sample: "patches_241.jpg",        status: "PENDING",    progress: 0,  priority: "NORMAL",    time: "12:08 PM", heatNumber: "H-44912" },
+  { id: "TASK-8844", coilId: "COIL-CL-312", line: "Pickling Entry Gate",  sample: "scratches_241.jpg",      status: "QUEUED",     progress: 0,  priority: "NORMAL",    time: "12:10 PM", heatNumber: "H-44913" },
 ];
 
 const INITIAL_COMPLETED = [
-  {
-    id: "COMP-771",
-    coilId: "COIL-HT-899",
-    specimen: "crazing_241.jpg",
-    time: "11:52 AM",
-    defectCount: 3,
-    primaryDefect: "crazing",
-    confidence: "94.2%",
-    verdict: "REJECT",
-    grade: "GRADE C",
-    operator: "Alex Mercer",
-  },
-  {
-    id: "COMP-770",
-    coilId: "COIL-HT-898",
-    specimen: "inclusion_241.jpg",
-    time: "11:45 AM",
-    defectCount: 2,
-    primaryDefect: "inclusion",
-    confidence: "96.4%",
-    verdict: "REJECT",
-    grade: "GRADE C",
-    operator: "Alex Mercer",
-  },
-  {
-    id: "COMP-769",
-    coilId: "COIL-CL-308",
-    specimen: "patches_241.jpg",
-    time: "11:34 AM",
-    defectCount: 1,
-    primaryDefect: "patches",
-    confidence: "93.0%",
-    verdict: "WARNING",
-    grade: "GRADE B",
-    operator: "Alex Mercer",
-  },
-  {
-    id: "COMP-768",
-    coilId: "COIL-CL-307",
-    specimen: "scratches_241.jpg",
-    time: "11:18 AM",
-    defectCount: 2,
-    primaryDefect: "scratches",
-    confidence: "97.2%",
-    verdict: "WARNING",
-    grade: "GRADE B",
-    operator: "Sarah Chen",
-  },
-  {
-    id: "COMP-767",
-    coilId: "COIL-HT-895",
-    specimen: "clean_strip_102.jpg",
-    time: "11:05 AM",
-    defectCount: 0,
-    primaryDefect: "none",
-    confidence: "99.8%",
-    verdict: "PASS",
-    grade: "GRADE A",
-    operator: "Sarah Chen",
-  },
-  {
-    id: "COMP-766",
-    coilId: "COIL-HT-894",
-    specimen: "pitted_surface_241.jpg",
-    time: "10:50 AM",
-    defectCount: 1,
-    primaryDefect: "pitted_surface",
-    confidence: "95.5%",
-    verdict: "REJECT",
-    grade: "GRADE C",
-    operator: "Sarah Chen",
-  },
+  { id: "COMP-771", coilId: "COIL-HT-899", specimen: "crazing_241.jpg",        time: "11:52 AM", defectCount: 3, primaryDefect: "crazing",        confidence: "94.2%", verdict: "REJECT",  grade: "GRADE C", operator: "Alex Mercer", latency: "17.2ms" },
+  { id: "COMP-770", coilId: "COIL-HT-898", specimen: "inclusion_241.jpg",      time: "11:45 AM", defectCount: 2, primaryDefect: "inclusion",      confidence: "96.4%", verdict: "REJECT",  grade: "GRADE C", operator: "Alex Mercer", latency: "18.9ms" },
+  { id: "COMP-769", coilId: "COIL-CL-308", specimen: "patches_241.jpg",        time: "11:34 AM", defectCount: 1, primaryDefect: "patches",        confidence: "93.0%", verdict: "WARNING", grade: "GRADE B", operator: "Alex Mercer", latency: "16.4ms" },
+  { id: "COMP-768", coilId: "COIL-CL-307", specimen: "scratches_241.jpg",      time: "11:18 AM", defectCount: 2, primaryDefect: "scratches",      confidence: "97.2%", verdict: "WARNING", grade: "GRADE B", operator: "Sarah Chen",  latency: "19.1ms" },
+  { id: "COMP-767", coilId: "COIL-HT-895", specimen: "clean_strip_102.jpg",    time: "11:05 AM", defectCount: 0, primaryDefect: "none",           confidence: "99.8%", verdict: "PASS",    grade: "GRADE A", operator: "Sarah Chen",  latency: "15.8ms" },
+  { id: "COMP-766", coilId: "COIL-HT-894", specimen: "pitted_surface_241.jpg", time: "10:50 AM", defectCount: 1, primaryDefect: "pitted_surface", confidence: "95.5%", verdict: "REJECT",  grade: "GRADE C", operator: "Sarah Chen",  latency: "17.6ms" },
 ];
 
-// Production Trend Days (7-Day Throughput)
 const TREND_DAYS = [
   { day: "MON", total: 210, passed: 198, failed: 12, rate: 94.3 },
   { day: "TUE", total: 245, passed: 232, failed: 13, rate: 94.7 },
-  { day: "WED", total: 260, passed: 251, failed: 9, rate: 96.5 },
+  { day: "WED", total: 260, passed: 251, failed: 9,  rate: 96.5 },
   { day: "THU", total: 230, passed: 218, failed: 12, rate: 94.8 },
   { day: "FRI", total: 280, passed: 263, failed: 17, rate: 93.9 },
-  { day: "SAT", total: 190, passed: 181, failed: 9, rate: 95.2 },
-  { day: "SUN", total: 142, passed: 135, failed: 7, rate: 95.1 },
+  { day: "SAT", total: 190, passed: 181, failed: 9,  rate: 95.2 },
+  { day: "SUN", total: 142, passed: 135, failed: 7,  rate: 95.1 },
 ];
 
 function prettyName(name = "") {
-  return name.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+  return name.replaceAll("_", " ").replace(/\b\w/g, (l) => l.toUpperCase());
 }
 
 function confidencePercent(value) {
-  const number = Number(value);
-  if (!Number.isFinite(number)) return 0;
-  return Math.max(0, Math.min(100, number <= 1 ? number * 100 : number));
+  const n = Number(value);
+  if (!Number.isFinite(n)) return 0;
+  return Math.max(0, Math.min(100, n <= 1 ? n * 100 : n));
 }
 
 function calculateVerdict(detections) {
   if (!detections || detections.length === 0) {
     return {
-      grade: "GRADE A",
-      status: "PASS",
+      grade: "GRADE A", status: "PASS",
       title: "100% CLEARANCE // ZERO DEFECTS DETECTED",
       colorText: "text-emerald-600 dark:text-[#d5ff38]",
       border: "border-emerald-500/30 dark:border-[#d5ff38]/40",
@@ -240,15 +112,10 @@ function calculateVerdict(detections) {
       action: "Coil passed metallurgical standards. Dispatched to automated strapping.",
     };
   }
-
-  const hasCritical = detections.some(
-    (d) => d.defect === "inclusion" || d.defect === "crazing"
-  );
-
+  const hasCritical = detections.some((d) => d.defect === "inclusion" || d.defect === "crazing");
   if (hasCritical || detections.length >= 3) {
     return {
-      grade: "GRADE C",
-      status: "REJECT",
+      grade: "GRADE C", status: "REJECT",
       title: "REJECT // CRITICAL DEFECT ISOLATED",
       colorText: "text-rose-600 dark:text-[#ff5436]",
       border: "border-rose-500/30 dark:border-[#ff5436]/40",
@@ -257,10 +124,8 @@ function calculateVerdict(detections) {
       action: "Coil marked with orange dye. Automated re-mill diversion executed.",
     };
   }
-
   return {
-    grade: "GRADE B",
-    status: "WARNING",
+    grade: "GRADE B", status: "WARNING",
     title: "CONDITION B // SECONDARY SURFACE REVIEW",
     colorText: "text-amber-600 dark:text-amber-400",
     border: "border-amber-500/30 dark:border-amber-400/40",
@@ -270,14 +135,44 @@ function calculateVerdict(detections) {
   };
 }
 
+// ─── PROFILE DATA (stored in localStorage) ────────────────────────
+const DEFAULT_PROFILE = {
+  name: "Alex Mercer",
+  role: "QA Lead Engineer",
+  plant: "Rolling Mill Plant 04B",
+  email: "alex.mercer@steelworks.io",
+  department: "Surface Quality Assurance",
+  shift: "Morning Shift A (06:00 - 14:00)",
+  employeeId: "EMP-77421",
+  certifications: "ISO 9001, ASTM A370, NEU-DET Certified",
+  joinDate: "2021-03-15",
+  totalInspections: 2847,
+  avgAccuracy: "94.8%",
+  notifEmail: true,
+  notifCritical: true,
+  notifBatch: false,
+  darkModeDefault: true,
+};
+
+function loadProfile() {
+  try {
+    const stored = localStorage.getItem("defectvision-profile");
+    return stored ? { ...DEFAULT_PROFILE, ...JSON.parse(stored) } : DEFAULT_PROFILE;
+  } catch { return DEFAULT_PROFILE; }
+}
+
+function saveProfile(profile) {
+  try { localStorage.setItem("defectvision-profile", JSON.stringify(profile)); } catch {}
+}
+
 export default function Dashboard() {
   const { isDark, toggleTheme } = useTheme();
 
-  // Navigation & Layout
-  const [activeTab, setActiveTab] = useState("analytics"); // "analytics" | "inspector" | "queue" | "history" | "benchmarks"
+  // ── Navigation
+  const [activeTab, setActiveTab] = useState("analytics");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
-  // Inspector State
+  // ── Inspector — Single file
   const [file, setFile] = useState(null);
   const [preview, setPreview] = useState("");
   const [result, setResult] = useState(null);
@@ -285,283 +180,280 @@ export default function Dashboard() {
   const [error, setError] = useState("");
   const [dragging, setDragging] = useState(false);
 
-  // Viewer Controls
+  // ── Inspector — Multi-file / Batch
+  const [uploadMode, setUploadMode] = useState("single"); // "single" | "batch"
+  const [batchFiles, setBatchFiles] = useState([]);       // array of File
+  const [batchResults, setBatchResults] = useState(null);
+  const [batchLoading, setBatchLoading] = useState(false);
+  const [batchError, setBatchError] = useState("");
+
+  // ── Viewer Controls
   const [viewMode, setViewMode] = useState("split");
   const [sliderPos, setSliderPos] = useState(50);
   const [isDraggingSlider, setIsDraggingSlider] = useState(false);
   const [confidenceFilter, setConfidenceFilter] = useState(15);
   const [selectedDetection, setSelectedDetection] = useState(null);
 
-  // Auto-Scan Live Simulation Mode
+  // ── Auto-Scan
   const [autoScanActive, setAutoScanActive] = useState(false);
   const [autoScanIndex, setAutoScanIndex] = useState(0);
 
-  // Task & Queue State
+  // ── Tasks
   const [pendingTasks, setPendingTasks] = useState(INITIAL_QUEUE);
   const [completedTasks, setCompletedTasks] = useState(INITIAL_COMPLETED);
   const [isProcessingQueue, setIsProcessingQueue] = useState(false);
   const [historySearch, setHistorySearch] = useState("");
   const [historyFilter, setHistoryFilter] = useState("ALL");
 
+  // ── Backend status
+  const [backendStatus, setBackendStatus] = useState("checking"); // "checking" | "online" | "offline"
+  const [backendInfo, setBackendInfo] = useState(null);
+
+  // ── Profile
+  const [profile, setProfile] = useState(loadProfile);
+  const [profileEditing, setProfileEditing] = useState(false);
+  const [profileDraft, setProfileDraft] = useState(loadProfile);
+
   const sliderRef = useRef(null);
 
+  // ── Backend health check on mount
   useEffect(() => {
-    if (!file) {
-      setPreview("");
-      return undefined;
-    }
+    getBackendHealth()
+      .then((info) => { setBackendStatus("online"); setBackendInfo(info); })
+      .catch(() => setBackendStatus("offline"));
+  }, []);
+
+  // ── Preview for single file
+  useEffect(() => {
+    if (!file) { setPreview(""); return; }
     const url = URL.createObjectURL(file);
     setPreview(url);
     return () => URL.revokeObjectURL(url);
   }, [file]);
 
-  // Auto-Scan Simulation Loop
+  // ── Auto-Scan loop
   useEffect(() => {
-    let timer;
+    let t;
     if (autoScanActive) {
-      timer = setInterval(() => {
-        const nextIdx = (autoScanIndex + 1) % SAMPLE_DEFECTS.length;
-        setAutoScanIndex(nextIdx);
-        loadPresetSample(SAMPLE_DEFECTS[nextIdx].file);
+      t = setInterval(() => {
+        const next = (autoScanIndex + 1) % SAMPLE_DEFECTS.length;
+        setAutoScanIndex(next);
+        loadPresetSample(SAMPLE_DEFECTS[next].file);
       }, 4000);
     }
-    return () => clearInterval(timer);
+    return () => clearInterval(t);
   }, [autoScanActive, autoScanIndex]);
 
-  // High-Contrast Theme Palette
-  const c = isDark
-    ? {
-        bg: "bg-[#0b0c08] text-[#f5f4ed]",
-        surface: "bg-[#141510]",
-        surfaceRaised: "bg-[#1c1d16]",
-        line: "border-[#25271d]",
-        lineLight: "border-[#323528]",
-        textPrimary: "text-[#f5f4ed]",
-        textSecondary: "text-[#9ca3af]",
-        textMuted: "text-[#6b7280]",
-        accent: "bg-[#d5ff38] text-black",
-        accentText: "text-[#d5ff38]",
-        accentBorder: "border-[#d5ff38]",
-        signalText: "text-[#ff5436]",
-        hover: "hover:bg-white/5",
-        activeItem: "bg-[#d5ff38]/15 border-l-2 border-[#d5ff38] text-[#d5ff38] font-bold",
-      }
-    : {
-        bg: "bg-[#f8f7f2] text-[#0f172a]",
-        surface: "bg-[#ffffff]",
-        surfaceRaised: "bg-[#f1efe6]",
-        line: "border-[#e2dfd4]",
-        lineLight: "border-[#cfccc0]",
-        textPrimary: "text-[#0f172a]",
-        textSecondary: "text-[#475569]",
-        textMuted: "text-[#64748b]",
-        accent: "bg-[#d5ff38] text-black border border-black/10",
-        accentText: "text-[#365314]", // Deep Olive for ultra-clear contrast in light mode!
-        accentBorder: "border-[#4d7c0f]",
-        signalText: "text-[#dc2626]",
-        hover: "hover:bg-black/5",
-        activeItem: "bg-[#d5ff38]/30 border-l-2 border-[#4d7c0f] text-[#1e3a8a] dark:text-[#d5ff38] font-black",
-      };
+  // ── Theme palette (high-contrast)
+  const c = isDark ? {
+    bg: "bg-[#0b0c08] text-[#f5f4ed]",
+    surface: "bg-[#141510]",
+    surfaceRaised: "bg-[#1c1d16]",
+    line: "border-[#25271d]",
+    textPrimary: "text-[#f5f4ed]",
+    textSecondary: "text-[#9ca3af]",
+    textMuted: "text-[#6b7280]",
+    accent: "bg-[#d5ff38] text-black",
+    accentText: "text-[#d5ff38]",
+    accentButton: "bg-[#d5ff38] text-black hover:bg-[#c8f230] border-transparent",
+    signalText: "text-[#ff5436]",
+    hover: "hover:bg-white/5",
+    activeItem: "bg-[#d5ff38]/15 border-l-2 border-[#d5ff38] text-[#d5ff38] font-bold",
+    input: "bg-[#1c1d16] border-[#25271d] text-[#f5f4ed] focus:border-[#d5ff38]",
+  } : {
+    bg: "bg-[#f8f7f2] text-[#0f172a]",
+    surface: "bg-[#ffffff]",
+    surfaceRaised: "bg-[#f1efe6]",
+    line: "border-[#e2dfd4]",
+    textPrimary: "text-[#0f172a]",
+    textSecondary: "text-[#475569]",
+    textMuted: "text-[#64748b]",
+    accent: "bg-[#d5ff38] text-black border border-black/10",
+    accentText: "text-[#365314]",
+    accentButton: "bg-[#365314] text-white hover:bg-[#254d0f] border-transparent",
+    signalText: "text-[#dc2626]",
+    hover: "hover:bg-black/5",
+    activeItem: "bg-[#d5ff38]/30 border-l-2 border-[#4d7c0f] text-[#1e3a8a] font-black",
+    input: "bg-white border-[#e2dfd4] text-[#0f172a] focus:border-[#365314]",
+  };
 
-  function acceptFile(selected) {
-    if (!selected) return;
-    if (!["image/jpeg", "image/png"].includes(selected.type)) {
-      setError("Please select a JPG or PNG image file.");
-      return;
-    }
-    if (selected.size > MAX_FILE_SIZE) {
-      setError("Image size must be 10 MB or less.");
-      return;
-    }
-    setFile(selected);
-    setResult(null);
-    setError("");
-    setSelectedDetection(null);
+  // ────────────────── FILE HELPERS ──────────────────
+  const VALID_TYPES = ["image/jpeg", "image/png", "image/webp", "image/bmp"];
+
+  function acceptSingleFile(f) {
+    if (!f) return;
+    if (!VALID_TYPES.includes(f.type)) { setError("JPG, PNG, WEBP or BMP only."); return; }
+    if (f.size > MAX_FILE_SIZE) { setError("Max file size is 10 MB."); return; }
+    setFile(f); setResult(null); setError(""); setSelectedDetection(null);
   }
 
-  function handleFileChange(event) {
-    acceptFile(event.target.files?.[0]);
-    event.target.value = "";
+  function acceptBatchFiles(fileList) {
+    const valid = Array.from(fileList).filter((f) => VALID_TYPES.includes(f.type) && f.size <= MAX_FILE_SIZE);
+    if (valid.length === 0) { setBatchError("No valid images found (JPG/PNG/WEBP/BMP, max 10 MB each)."); return; }
+    setBatchFiles((prev) => {
+      const names = new Set(prev.map((f) => f.name));
+      const fresh = valid.filter((f) => !names.has(f.name));
+      return [...prev, ...fresh];
+    });
+    setBatchResults(null); setBatchError("");
   }
 
-  function handleDrop(event) {
-    event.preventDefault();
-    setDragging(false);
-    acceptFile(event.dataTransfer.files?.[0]);
+  function handleSingleFileChange(e) { acceptSingleFile(e.target.files?.[0]); e.target.value = ""; }
+  function handleBatchFileChange(e) { acceptBatchFiles(e.target.files); e.target.value = ""; }
+  function handleDrop(e) {
+    e.preventDefault(); setDragging(false);
+    if (uploadMode === "batch") acceptBatchFiles(e.dataTransfer.files);
+    else acceptSingleFile(e.dataTransfer.files?.[0]);
   }
 
-  async function loadPresetSample(sampleFileName) {
+  async function loadPresetSample(fileName) {
     try {
-      const response = await fetch(`/samples/${sampleFileName}`);
-      if (!response.ok) throw new Error("Could not load sample file.");
-      const blob = await response.blob();
-      const sampleFile = new File([blob], sampleFileName, { type: "image/jpeg" });
-      acceptFile(sampleFile);
-    } catch (err) {
-      setError("Failed to load preset sample image.");
-    }
+      const res = await fetch(`/samples/${fileName}`);
+      if (!res.ok) throw new Error();
+      const blob = await res.blob();
+      const f = new File([blob], fileName, { type: "image/jpeg" });
+      if (uploadMode === "batch") acceptBatchFiles([f]);
+      else acceptSingleFile(f);
+    } catch { setError("Failed to load sample."); }
   }
 
+  // ────────────────── SINGLE INSPECT ──────────────────
   async function handleAnalyze() {
     if (!file || loading) return;
-
-    setLoading(true);
-    setError("");
-    setResult(null);
-    setSelectedDetection(null);
-
+    setLoading(true); setError(""); setResult(null); setSelectedDetection(null);
     try {
-      const data = await inspectImage(file);
+      const data = await inspectImage(file, confidenceFilter);
       setResult(data);
-
-      const verdictData = calculateVerdict(data.detections);
-      const newRecord = {
-        id: `COMP-${Math.floor(772 + Math.random() * 200)}`,
-        coilId: `COIL-HT-${Math.floor(900 + Math.random() * 100)}`,
-        specimen: file.name,
-        time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-        defectCount: data.count || data.detections?.length || 0,
-        primaryDefect: data.detections?.[0]?.defect || "none",
-        confidence: data.detections?.[0]
-          ? `${(data.detections[0].confidence * 100).toFixed(1)}%`
-          : "99.8%",
-        verdict: verdictData.status,
-        grade: verdictData.grade,
-        operator: "Alex Mercer",
-      };
-
-      setCompletedTasks((prev) => [newRecord, ...prev]);
+      addToCompleted(file.name, data.detections || [], data.latency_ms, data.grade, data.verdict);
     } catch (err) {
-      setError(
-        err.message ||
-          "Could not reach prediction API on port 8000. Verify the FastAPI backend is running."
-      );
-    } finally {
-      setLoading(false);
-    }
+      setError(err.message || "Cannot connect to backend on port 8000. Start FastAPI first.");
+      setBackendStatus("offline");
+    } finally { setLoading(false); }
   }
 
+  // ────────────────── BATCH INSPECT ──────────────────
+  async function handleBatchAnalyze() {
+    if (batchFiles.length === 0 || batchLoading) return;
+    setBatchLoading(true); setBatchError(""); setBatchResults(null);
+    try {
+      const data = await inspectBatch(batchFiles, confidenceFilter);
+      setBatchResults(data);
+      // Add each result to completed log
+      data.results.forEach((r) => {
+        addToCompleted(r.filename, r.detections || [], r.latency_ms, r.grade, r.verdict);
+      });
+    } catch (err) {
+      setBatchError(err.message || "Batch prediction failed. Check backend.");
+      setBackendStatus("offline");
+    } finally { setBatchLoading(false); }
+  }
+
+  function addToCompleted(filename, detections, latencyMs, grade, verdict) {
+    const record = {
+      id: `COMP-${Math.floor(800 + Math.random() * 999)}`,
+      coilId: `COIL-RT-${Math.floor(1000 + Math.random() * 9000)}`,
+      specimen: filename,
+      time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      defectCount: detections.length,
+      primaryDefect: detections[0]?.defect || "none",
+      confidence: detections[0] ? `${(detections[0].confidence * 100).toFixed(1)}%` : "99.8%",
+      verdict: verdict || calculateVerdict(detections).status,
+      grade: grade || calculateVerdict(detections).grade,
+      operator: profile.name,
+      latency: latencyMs ? `${latencyMs.toFixed(1)}ms` : "—",
+    };
+    setCompletedTasks((prev) => [record, ...prev]);
+  }
+
+  // ────────────────── SLIDER ──────────────────
   function handleSliderMove(e) {
     if (!sliderRef.current) return;
     const rect = sliderRef.current.getBoundingClientRect();
     const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-    const x = Math.max(0, Math.min(rect.width, clientX - rect.left));
-    setSliderPos((x / rect.width) * 100);
+    setSliderPos(Math.max(2, Math.min(98, ((clientX - rect.left) / rect.width) * 100)));
   }
 
-  function runQueueTask(task) {
-    loadPresetSample(task.sample);
-    setActiveTab("inspector");
-  }
-
+  // ────────────────── QUEUE ──────────────────
+  function runQueueTask(task) { loadPresetSample(task.sample); setActiveTab("inspector"); }
   function simulateProcessBatch() {
     setIsProcessingQueue(true);
-    setTimeout(() => {
-      setPendingTasks((prev) =>
-        prev.map((t) => ({ ...t, status: "COMPLETED", progress: 100 }))
-      );
-      setIsProcessingQueue(false);
-    }, 1800);
+    setTimeout(() => { setPendingTasks((p) => p.map((t) => ({ ...t, status: "COMPLETED", progress: 100 }))); setIsProcessingQueue(false); }, 1800);
   }
 
+  // ────────────────── CSV EXPORT ──────────────────
   function exportCSV() {
     const rows = [
-      ["TASK_ID", "COIL_ID", "SPECIMEN", "TIMESTAMP", "DEFECTS", "PRIMARY_CLASS", "CONFIDENCE", "GRADE", "VERDICT", "OPERATOR"],
-      ...completedTasks.map((t) => [
-        t.id,
-        t.coilId,
-        t.specimen,
-        t.time,
-        t.defectCount,
-        t.primaryDefect,
-        t.confidence,
-        t.grade,
-        t.verdict,
-        t.operator,
-      ]),
+      ["TASK_ID","COIL_ID","SPECIMEN","TIMESTAMP","DEFECTS","PRIMARY_CLASS","CONFIDENCE","GRADE","VERDICT","OPERATOR","LATENCY"],
+      ...completedTasks.map((t) => [t.id,t.coilId,t.specimen,t.time,t.defectCount,t.primaryDefect,t.confidence,t.grade,t.verdict,t.operator,t.latency||"—"]),
     ];
-    const csvContent = "data:text/csv;charset=utf-8," + rows.map((e) => e.join(",")).join("\n");
-    const encodedUri = encodeURI(csvContent);
+    const csvContent = "data:text/csv;charset=utf-8," + rows.map((r) => r.join(",")).join("\n");
     const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `defect_inspection_audit_${Date.now()}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    link.setAttribute("href", encodeURI(csvContent));
+    link.setAttribute("download", `defect_audit_${Date.now()}.csv`);
+    document.body.appendChild(link); link.click(); document.body.removeChild(link);
   }
 
-  const rawDetections = result?.detections || [];
-  const filteredDetections = rawDetections.filter(
-    (d) => confidencePercent(d.confidence) >= confidenceFilter
-  );
-  const uniqueClasses = new Set(filteredDetections.map((item) => item.defect)).size;
-  const currentVerdict = calculateVerdict(filteredDetections);
+  // ────────────────── PROFILE SAVE ──────────────────
+  function saveProfileEdits() {
+    setProfile(profileDraft);
+    saveProfile(profileDraft);
+    setProfileEditing(false);
+  }
 
-  // Filtered Completed Tasks
-  const displayedCompleted = completedTasks.filter((task) => {
-    const matchesSearch =
-      task.coilId.toLowerCase().includes(historySearch.toLowerCase()) ||
-      task.specimen.toLowerCase().includes(historySearch.toLowerCase()) ||
-      task.primaryDefect.toLowerCase().includes(historySearch.toLowerCase());
-    const matchesFilter =
-      historyFilter === "ALL" || task.verdict === historyFilter;
-    return matchesSearch && matchesFilter;
+  // ─────────────── DERIVED STATE ───────────────
+  const rawDetections = result?.detections || [];
+  const filteredDetections = rawDetections.filter((d) => confidencePercent(d.confidence) >= confidenceFilter);
+  const currentVerdict = calculateVerdict(filteredDetections);
+  const displayedCompleted = completedTasks.filter((t) => {
+    const matchSearch = t.coilId.toLowerCase().includes(historySearch.toLowerCase()) ||
+                        t.specimen.toLowerCase().includes(historySearch.toLowerCase()) ||
+                        t.primaryDefect.toLowerCase().includes(historySearch.toLowerCase());
+    return matchSearch && (historyFilter === "ALL" || t.verdict === historyFilter);
   });
 
+  const TABS = [
+    { id: "analytics", label: "SUCCESS RATE & YIELD", badge: "94.8% PASS", badgeColor: "bg-emerald-600 text-white", icon: <BarChart3 size={18} /> },
+    { id: "inspector", label: "LIVE INSPECTOR",        badge: "STUDIO",     icon: <Crosshair size={18} /> },
+    { id: "queue",     label: "BATCH QUEUE",           badge: `${pendingTasks.filter((t) => t.status !== "COMPLETED").length} PENDING`, badgeColor: "bg-amber-500 text-black", icon: <ListTodo size={18} /> },
+    { id: "history",   label: "COMPLETED AUDIT",       badge: `${completedTasks.length} RUNS`, icon: <History size={18} /> },
+    { id: "benchmarks",label: "MODEL BENCHMARKS",      badge: "67.7% mAP",  icon: <Cpu size={18} /> },
+    { id: "profile",   label: "OPERATOR PROFILE",      badge: profile.role.split(" ")[0].toUpperCase(), icon: <User size={18} /> },
+  ];
+
+  // ═══════════════════════════════════════════════════════════════
+  //  RENDER
+  // ═══════════════════════════════════════════════════════════════
   return (
     <div className={`min-h-screen flex flex-col font-mono selection:bg-[#d5ff38] selection:text-black transition-colors duration-200 ${c.bg}`}>
-      {/* ================= 1. DEDICATED APP TOPBAR ================= */}
-      <header className={`border-b ${c.line} ${c.surface} sticky top-0 z-50 text-xs select-none h-14 flex items-stretch justify-between`}>
-        {/* Left: Brand & Sidebar Collapse Toggle */}
-        <div className="flex items-stretch">
-          <button
-            onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-            className={`px-4 border-r ${c.line} ${c.hover} flex items-center justify-center`}
-            title="Toggle Sidebar Navigation"
-          >
-            {sidebarCollapsed ? (
-              <PanelLeftOpen size={18} className={isDark ? "text-[#d5ff38]" : "text-slate-800"} />
-            ) : (
-              <PanelLeftClose size={18} className={isDark ? "text-[#d5ff38]" : "text-slate-800"} />
-            )}
-          </button>
 
-          <Link
-            to="/"
-            className={`flex items-center gap-3 px-4 sm:px-6 border-r ${c.line} ${c.hover} group`}
-            title="Back to Landing Page"
-          >
-            <div className="w-8 h-8 bg-[#d5ff38] text-black font-black flex items-center justify-center text-sm group-hover:rotate-90 transition-transform">
+      {/* ═══ TOP BAR ═══ */}
+      <header className={`border-b ${c.line} ${c.surface} sticky top-0 z-50 text-xs select-none h-14 flex items-stretch justify-between shrink-0`}>
+        <div className="flex items-stretch">
+          <button onClick={() => setSidebarCollapsed(!sidebarCollapsed)} className={`px-4 border-r ${c.line} ${c.hover} flex items-center justify-center`}>
+            {sidebarCollapsed ? <PanelLeftOpen size={18} className={c.accentText} /> : <PanelLeftClose size={18} className={c.accentText} />}
+          </button>
+          <Link to="/" className={`flex items-center gap-3 px-4 sm:px-5 border-r ${c.line} ${c.hover} group`}>
+            <div className="w-8 h-8 bg-[#d5ff38] text-black font-black flex items-center justify-center group-hover:rotate-90 transition-transform">
               <ScanLine size={18} strokeWidth={2.4} />
             </div>
-            <div>
-              <span className={`font-black text-sm uppercase tracking-tight font-sans block leading-none ${c.textPrimary}`}>
-                DEFECTVISION<span className={c.signalText}>.</span>
-              </span>
-              <span className={`text-[8px] tracking-[0.2em] uppercase block mt-0.5 ${c.textMuted}`}>
-                QA STUDIO WORKBENCH
-              </span>
+            <div className="hidden sm:block">
+              <span className={`font-black text-sm uppercase tracking-tight font-sans block leading-none ${c.textPrimary}`}>DEFECTVISION<span className={c.signalText}>.</span></span>
+              <span className={`text-[8px] tracking-[0.2em] uppercase block mt-0.5 ${c.textMuted}`}>QA STUDIO v2</span>
             </div>
           </Link>
-
-          {/* Active View Title */}
           <div className="hidden lg:flex items-center gap-3 px-6 text-[11px] font-bold uppercase tracking-wider">
             <span className={c.textMuted}>WORKSPACE //</span>
             <span className={`${isDark ? "text-[#d5ff38]" : "text-slate-900"} font-black`}>
-              {activeTab === "analytics" && "SUCCESS RATE & QUALITY YIELD INTELLIGENCE"}
-              {activeTab === "inspector" && "LIVE SPECIMEN INSPECTOR"}
-              {activeTab === "queue" && "BATCH QUEUE & PENDING TASKS"}
-              {activeTab === "history" && "AUDIT TRAIL & COMPLETED RUNS"}
-              {activeTab === "benchmarks" && "NEU-DET MODEL BENCHMARKS"}
+              {TABS.find((t) => t.id === activeTab)?.label}
             </span>
           </div>
         </div>
 
-        {/* Center: Live Telemetry Numbers */}
+        {/* Centre — live telemetry */}
         <div className="hidden xl:flex items-center gap-3 text-[10px] uppercase font-bold tracking-wider">
           <div className={`flex items-center gap-2 px-3 py-1 border ${c.line} ${c.surfaceRaised}`}>
-            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-            <span className={c.textPrimary}>STAND 04B: 12.4 M/S</span>
+            <span className={`w-2 h-2 rounded-full ${backendStatus === "online" ? "bg-emerald-500 animate-pulse" : backendStatus === "offline" ? "bg-rose-500" : "bg-amber-500 animate-pulse"}`} />
+            <span className={c.textPrimary}>API: {backendStatus.toUpperCase()}</span>
           </div>
           <div className={`flex items-center gap-2 px-3 py-1 border ${c.line} ${c.surfaceRaised}`}>
             <span className={isDark ? "text-[#d5ff38]" : "text-emerald-800"}>SUCCESS RATE:</span>
@@ -569,122 +461,47 @@ export default function Dashboard() {
           </div>
           <div className={`flex items-center gap-2 px-3 py-1 border ${c.line} ${c.surfaceRaised}`}>
             <span className={c.textMuted}>INSPECTED TODAY:</span>
-            <span className={c.textPrimary}>1,428 COILS</span>
+            <span className={c.textPrimary}>{completedTasks.length + 1_422} COILS</span>
           </div>
         </div>
 
-        {/* Right Tools */}
+        {/* Right */}
         <div className="flex items-stretch">
-          <Link
-            to="/"
-            className={`flex items-center gap-2 px-4 border-l text-[11px] font-bold uppercase tracking-wider ${c.line} ${c.hover} ${c.textSecondary}`}
-          >
+          <Link to="/" className={`flex items-center gap-2 px-4 border-l text-[11px] font-bold uppercase tracking-wider ${c.line} ${c.hover} ${c.textSecondary}`}>
             <ArrowLeft size={13} strokeWidth={2.5} />
-            <span className="hidden sm:inline">EXIT STUDIO</span>
+            <span className="hidden sm:inline">EXIT</span>
           </Link>
-
-          {/* Theme Toggle Button */}
-          <button
-            onClick={toggleTheme}
-            className={`flex items-center gap-2 px-4 border-l text-[11px] font-black uppercase tracking-wider transition-colors ${c.line} ${c.hover}`}
-            title="Toggle Dark / Light theme"
-          >
-            {isDark ? (
-              <>
-                <Sun size={15} className="text-[#d5ff38]" />
-                <span className="hidden sm:inline text-white">LIGHT</span>
-              </>
-            ) : (
-              <>
-                <Moon size={15} className="text-slate-900" />
-                <span className="hidden sm:inline text-slate-900">DARK</span>
-              </>
-            )}
+          <button onClick={toggleTheme} className={`flex items-center gap-2 px-4 border-l text-[11px] font-black uppercase tracking-wider transition-colors ${c.line} ${c.hover}`}>
+            {isDark ? <Sun size={15} className="text-[#d5ff38]" /> : <Moon size={15} className="text-slate-900" />}
+            <span className={`hidden sm:inline ${isDark ? "text-white" : "text-slate-900"}`}>{isDark ? "LIGHT" : "DARK"}</span>
           </button>
-
-          {/* Operator Profile Chip */}
-          <div className={`hidden sm:flex items-center gap-2.5 px-5 border-l text-[10px] font-bold uppercase tracking-wider ${c.line} ${c.surfaceRaised}`}>
-            <div className="w-2 h-2 rounded-full bg-emerald-500" />
-            <span className={c.textPrimary}>ALEX M. [ QA LEAD ]</span>
-          </div>
+          <button onClick={() => setActiveTab("profile")} className={`hidden sm:flex items-center gap-2.5 px-5 border-l text-[10px] font-bold uppercase tracking-wider ${c.line} ${c.hover}`}>
+            <div className="w-6 h-6 rounded-full bg-[#d5ff38] text-black flex items-center justify-center font-black text-xs">
+              {profile.name.split(" ").map((n) => n[0]).join("")}
+            </div>
+            <span className={c.textPrimary}>{profile.name.split(" ")[0]} [{profile.role.split(" ")[0]}]</span>
+          </button>
         </div>
       </header>
 
-      {/* ================= 2. MAIN APP LAYOUT (SIDEBAR + CONTENT) ================= */}
+      {/* ═══ BODY ═══ */}
       <div className="flex-1 flex overflow-hidden">
-        {/* ================= ADVANCED INDUSTRIAL SIDEBAR ================= */}
-        <aside
-          className={`border-r ${c.line} ${c.surface} flex flex-col justify-between transition-all duration-200 select-none shrink-0 ${
-            sidebarCollapsed ? "w-16" : "w-64 sm:w-72"
-          }`}
-        >
-          {/* Top Nav Items */}
-          <div className="p-3 space-y-1 overflow-y-auto">
-            {!sidebarCollapsed && (
-              <div className={`px-3 py-2 text-[9px] font-black uppercase tracking-[0.2em] ${c.textMuted}`}>
-                CONTROL CHANNELS
-              </div>
-            )}
 
-            {[
-              {
-                id: "analytics",
-                label: "SUCCESS RATE & YIELD",
-                badge: "94.8% PASS",
-                badgeColor: "bg-emerald-600 text-white dark:bg-[#d5ff38] dark:text-black",
-                icon: <BarChart3 size={18} strokeWidth={2} />,
-              },
-              {
-                id: "inspector",
-                label: "LIVE INSPECTOR",
-                badge: "STUDIO",
-                icon: <Crosshair size={18} strokeWidth={2} />,
-              },
-              {
-                id: "queue",
-                label: "BATCH QUEUE",
-                badge: `${pendingTasks.filter((t) => t.status !== "COMPLETED").length} PENDING`,
-                badgeColor: "bg-amber-500 text-black",
-                icon: <ListTodo size={18} strokeWidth={2} />,
-              },
-              {
-                id: "history",
-                label: "COMPLETED AUDIT",
-                badge: `${completedTasks.length} RUNS`,
-                icon: <History size={18} strokeWidth={2} />,
-              },
-              {
-                id: "benchmarks",
-                label: "MODEL BENCHMARKS",
-                badge: "85.4% mAP",
-                icon: <Cpu size={18} strokeWidth={2} />,
-              },
-            ].map((tab) => {
+        {/* ─── SIDEBAR ─── */}
+        <aside className={`border-r ${c.line} ${c.surface} flex flex-col justify-between transition-all duration-200 select-none shrink-0 ${sidebarCollapsed ? "w-14" : "w-60 sm:w-64"}`}>
+          <div className="p-2 space-y-0.5 overflow-y-auto">
+            {!sidebarCollapsed && <div className={`px-3 py-2 text-[9px] font-black uppercase tracking-[0.2em] ${c.textMuted}`}>CONTROL CHANNELS</div>}
+            {TABS.map((tab) => {
               const active = activeTab === tab.id;
               return (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
-                  className={`w-full flex items-center justify-between p-3 text-xs tracking-wider uppercase transition-colors rounded-none ${
-                    active ? c.activeItem : `${c.hover} ${c.textSecondary}`
-                  }`}
-                  title={tab.label}
-                >
+                <button key={tab.id} onClick={() => setActiveTab(tab.id)}
+                  className={`w-full flex items-center justify-between p-3 text-xs tracking-wider uppercase transition-colors ${active ? c.activeItem : `${c.hover} ${c.textSecondary}`}`}>
                   <div className="flex items-center gap-3 min-w-0">
-                    <span className={active ? (isDark ? "text-[#d5ff38]" : "text-emerald-800") : c.textMuted}>
-                      {tab.icon}
-                    </span>
-                    {!sidebarCollapsed && (
-                      <span className="font-bold truncate text-[11px]">{tab.label}</span>
-                    )}
+                    <span className={active ? (isDark ? "text-[#d5ff38]" : "text-emerald-800") : c.textMuted}>{tab.icon}</span>
+                    {!sidebarCollapsed && <span className="font-bold truncate text-[11px]">{tab.label}</span>}
                   </div>
-
                   {!sidebarCollapsed && tab.badge && (
-                    <span
-                      className={`px-1.5 py-0.5 text-[8px] font-mono font-bold uppercase rounded-sm ${
-                        tab.badgeColor || (isDark ? "bg-white/10 text-white" : "bg-black/10 text-black")
-                      }`}
-                    >
+                    <span className={`px-1.5 py-0.5 text-[8px] font-mono font-bold uppercase rounded-sm ${tab.badgeColor || (isDark ? "bg-white/10 text-white" : "bg-black/10 text-black")}`}>
                       {tab.badge}
                     </span>
                   )}
@@ -693,834 +510,525 @@ export default function Dashboard() {
             })}
           </div>
 
-          {/* Bottom Diagnostics Strip */}
-          <div className={`p-4 border-t ${c.line} ${c.surfaceRaised} text-[10px]`}>
+          {/* Sidebar bottom strip */}
+          <div className={`p-3 border-t ${c.line} ${c.surfaceRaised} text-[10px]`}>
             {!sidebarCollapsed ? (
-              <div className="space-y-2.5">
+              <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className={c.textMuted}>SUCCESS RATE:</span>
-                  <span className="font-black text-emerald-500">94.8% [+1.4%]</span>
+                  <span className={c.textMuted}>BACKEND:</span>
+                  <span className={`font-black ${backendStatus === "online" ? "text-emerald-500" : "text-rose-500"}`}>{backendStatus.toUpperCase()}</span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className={c.textMuted}>INSPECTION SPEED:</span>
-                  <span className={`font-bold ${isDark ? "text-[#d5ff38]" : "text-emerald-700"}`}>
-                    18.4 MS / FRAME
-                  </span>
+                  <span className={c.textMuted}>LATENCY:</span>
+                  <span className={`font-bold ${isDark ? "text-[#d5ff38]" : "text-emerald-700"}`}>{backendInfo ? `${backendInfo.uptime_seconds}s UP` : "—"}</span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className={c.textMuted}>STAND SPEED:</span>
-                  <span className={`font-bold ${c.textPrimary}`}>60 FPS // 12.4 M/S</span>
+                  <span className={c.textMuted}>MODEL:</span>
+                  <span className={`font-bold ${c.textPrimary}`}>YOLO11-IMP</span>
                 </div>
               </div>
             ) : (
-              <div className="flex justify-center" title="Armed & Online">
-                <div className="w-3 h-3 rounded-full bg-emerald-500 animate-pulse" />
+              <div className="flex justify-center" title={`Backend: ${backendStatus}`}>
+                <div className={`w-3 h-3 rounded-full ${backendStatus === "online" ? "bg-emerald-500 animate-pulse" : "bg-rose-500"}`} />
               </div>
             )}
           </div>
         </aside>
 
-        {/* ================= MAIN CONTENT VIEWPORT ================= */}
+        {/* ═══ MAIN CONTENT ═══ */}
         <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 flex flex-col gap-6">
-          {/* ================= TAB 1: LIVE INSPECTOR ================= */}
+
+          {/* ═══════════ TAB: ANALYTICS ═══════════ */}
+          {activeTab === "analytics" && (
+            <div className="space-y-6">
+              <div className={`p-5 border ${c.line} ${c.surface} flex flex-col sm:flex-row sm:items-center justify-between gap-4`}>
+                <div>
+                  <h2 className={`text-lg font-black uppercase tracking-tight font-sans ${c.textPrimary}`}>SUCCESS RATE & QUALITY YIELD INTELLIGENCE</h2>
+                  <p className={`text-xs uppercase mt-1 ${c.textMuted}`}>Continuous telemetry — Rolling Stands 01–04 · Backend: <span className={backendStatus === "online" ? "text-emerald-500" : "text-rose-500"}>{backendStatus}</span></p>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="px-3 py-1 bg-emerald-500/10 text-emerald-600 dark:text-[#d5ff38] border border-emerald-500/30 text-[10px] font-bold uppercase">LIVE DATASTREAM</span>
+                  <button onClick={() => setActiveTab("inspector")} className={`px-3.5 py-1.5 text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5 transition-colors border ${c.accentButton}`}>
+                    <Crosshair size={13} strokeWidth={2.5} />
+                    <span>LAUNCH INSPECTOR ↗</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* KPI Cards */}
+              <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                {/* Success Rate Gauge */}
+                <div className={`p-5 border ${c.line} ${c.surface} flex items-center justify-between`}>
+                  <div>
+                    <div className={`text-[10px] font-bold uppercase tracking-wider ${c.textMuted}`}>OVERALL SUCCESS RATE</div>
+                    <div className="text-3xl font-black font-sans mt-1 text-emerald-500">94.8%</div>
+                    <div className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold flex items-center gap-1 mt-1"><TrendingUp size={12} /><span>+1.4% vs LAST WEEK</span></div>
+                  </div>
+                  <div className="relative w-16 h-16 shrink-0">
+                    <svg className="w-full h-full -rotate-90" viewBox="0 0 100 100">
+                      <circle cx="50" cy="50" r="40" className="stroke-black/10 dark:stroke-white/10" strokeWidth="10" fill="transparent" />
+                      <circle cx="50" cy="50" r="40" className="stroke-emerald-500" strokeWidth="10" strokeDasharray="251.3" strokeDashoffset="13" strokeLinecap="round" fill="transparent" />
+                    </svg>
+                    <div className="absolute inset-0 flex items-center justify-center text-[11px] font-black font-sans">95%</div>
+                  </div>
+                </div>
+                {/* Coils */}
+                <div className={`p-5 border ${c.line} ${c.surface}`}>
+                  <div className={`text-[10px] font-bold uppercase tracking-wider ${c.textMuted}`}>TOTAL COILS SCANNED</div>
+                  <div className={`text-3xl font-black font-sans mt-1 ${c.textPrimary}`}>{(completedTasks.length + 1_422).toLocaleString()}</div>
+                  <div className={`text-[10px] mt-1 uppercase ${c.textMuted}`}>Target: 1,500 Coils / Shift</div>
+                </div>
+                {/* Rejection Rate */}
+                <div className={`p-5 border ${c.line} ${c.surface}`}>
+                  <div className={`text-[10px] font-bold uppercase tracking-wider ${c.textMuted}`}>CRITICAL REJECTION RATE</div>
+                  <div className="text-3xl font-black font-sans mt-1 text-rose-500">5.2%</div>
+                  <div className="text-[10px] text-emerald-500 font-bold flex items-center gap-1 mt-1"><TrendingDown size={12} /><span>-0.8% REDUCTION</span></div>
+                </div>
+                {/* Latency */}
+                <div className={`p-5 border ${c.line} ${c.surface}`}>
+                  <div className={`text-[10px] font-bold uppercase tracking-wider ${c.textMuted}`}>INFERENCE LATENCY</div>
+                  <div className={`text-3xl font-black font-sans mt-1 ${isDark ? "text-[#d5ff38]" : "text-emerald-700"}`}>18.4 MS</div>
+                  <div className={`text-[10px] mt-1 uppercase ${c.textMuted}`}>SUB-FRAME 60 FPS INLINE</div>
+                </div>
+              </div>
+
+              {/* Charts */}
+              <div className="grid lg:grid-cols-12 gap-6">
+                {/* 7-day trend */}
+                <div className={`lg:col-span-8 p-6 border ${c.line} ${c.surface} flex flex-col`}>
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-4 mb-4 border-b gap-2" style={{ borderColor: "inherit" }}>
+                    <div>
+                      <h3 className={`text-xs font-black uppercase tracking-wider ${c.textPrimary} flex items-center gap-2`}><TrendingUp size={14} className="text-emerald-500" /><span>7-DAY SUCCESS RATE TREND</span></h3>
+                      <p className={`text-[10px] uppercase mt-0.5 ${c.textMuted}`}>Daily coil pass rates — Rolling Line 04</p>
+                    </div>
+                    <div className="flex items-center gap-4 text-[10px] font-bold">
+                      <span className="flex items-center gap-1.5 text-emerald-500"><span className="w-2.5 h-2.5 bg-emerald-500 rounded-sm" />PASSED</span>
+                      <span className="flex items-center gap-1.5 text-rose-500"><span className="w-2.5 h-2.5 bg-rose-500 rounded-sm" />REJECTED</span>
+                    </div>
+                  </div>
+                  <div className="relative aspect-[21/9] w-full pt-4">
+                    <svg className="w-full h-full overflow-visible" viewBox="0 0 700 200">
+                      <defs>
+                        <linearGradient id="ag" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="#10b981" stopOpacity="0.35" />
+                          <stop offset="100%" stopColor="#10b981" stopOpacity="0.0" />
+                        </linearGradient>
+                      </defs>
+                      <line x1="0" y1="40"  x2="700" y2="40"  stroke="currentColor" className="opacity-10" strokeDasharray="3 3" />
+                      <line x1="0" y1="90"  x2="700" y2="90"  stroke="currentColor" className="opacity-10" strokeDasharray="3 3" />
+                      <line x1="0" y1="140" x2="700" y2="140" stroke="currentColor" className="opacity-10" strokeDasharray="3 3" />
+                      <line x1="0" y1="180" x2="700" y2="180" stroke="currentColor" className="opacity-20" />
+                      <polygon points="0,180 50,110 150,85 250,60 350,90 450,45 550,75 650,30 700,50 700,180 0,180" fill="url(#ag)" />
+                      <polyline points="50,110 150,85 250,60 350,90 450,45 550,75 650,30" fill="none" stroke="#10b981" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" />
+                      <polyline points="50,165 150,162 250,170 350,160 450,155 550,168 650,172" fill="none" stroke="#ef4444" strokeWidth="2" strokeDasharray="4 4" />
+                      {[{x:50,y:110,r:"94.3%"},{x:150,y:85,r:"94.7%"},{x:250,y:60,r:"96.5%"},{x:350,y:90,r:"94.8%"},{x:450,y:45,r:"93.9%"},{x:550,y:75,r:"95.2%"},{x:650,y:30,r:"95.1%"}].map((p, i) => (
+                        <g key={i}>
+                          <circle cx={p.x} cy={p.y} r="5" className="fill-[#10b981] stroke-black dark:stroke-white" strokeWidth="2" />
+                          <text x={p.x} y={p.y - 10} textAnchor="middle" className="text-[10px] font-bold fill-current font-mono">{p.r}</text>
+                        </g>
+                      ))}
+                    </svg>
+                    <div className="flex justify-between text-[10px] font-mono font-bold mt-2 uppercase opacity-60 px-4">
+                      {TREND_DAYS.map((d) => <span key={d.day}>{d.day} ({d.total})</span>)}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Shift bars */}
+                <div className={`lg:col-span-4 p-6 border ${c.line} ${c.surface} flex flex-col justify-between`}>
+                  <div className="pb-4 mb-4 border-b border-current/10">
+                    <h3 className={`text-xs font-black uppercase tracking-wider ${c.textPrimary}`}>SHIFT PRODUCTION</h3>
+                    <p className={`text-[10px] uppercase mt-0.5 ${c.textMuted}`}>Pass vs Reject by crew</p>
+                  </div>
+                  <div className="space-y-5">
+                    {[
+                      { shift: "SHIFT A (06:00 – 14:00)", pass: 520, reject: 32, rate: "94.2%" },
+                      { shift: "SHIFT B (14:00 – 22:00)", pass: 490, reject: 28, rate: "94.6%" },
+                      { shift: "SHIFT C (22:00 – 06:00)", pass: 418, reject: 14, rate: "96.7%" },
+                    ].map((s, i) => (
+                      <div key={i} className="space-y-1.5">
+                        <div className="flex justify-between text-xs font-bold uppercase">
+                          <span className={c.textPrimary}>{s.shift}</span>
+                          <span className="text-emerald-500 font-mono">{s.rate}</span>
+                        </div>
+                        <div className="w-full bg-black/10 dark:bg-white/10 h-3 flex overflow-hidden">
+                          <div className="bg-emerald-500 h-full" style={{ width: `${(s.pass / (s.pass + s.reject)) * 100}%` }} />
+                          <div className="bg-rose-500 h-full" style={{ width: `${(s.reject / (s.pass + s.reject)) * 100}%` }} />
+                        </div>
+                        <div className="flex justify-between text-[9px] font-mono opacity-50 uppercase">
+                          <span>Passed: {s.pass}</span><span>Rejected: {s.reject}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Defect Breakdown */}
+              <div className={`p-6 border ${c.line} ${c.surface}`}>
+                <h3 className={`text-xs font-black uppercase tracking-wider mb-5 ${c.textPrimary}`}>NEU-DET DEFECT CLASS FREQUENCY</h3>
+                <div className="space-y-3">
+                  {[
+                    { name: "Crazing",        pct: 31.2, color: "#ff5436" },
+                    { name: "Scratches",      pct: 24.8, color: "#16a34a" },
+                    { name: "Inclusion",      pct: 19.1, color: "#ef4444" },
+                    { name: "Pitted Surface", pct: 13.5, color: "#0284c7" },
+                    { name: "Rolled-in Scale",pct: 7.4,  color: "#9333ea" },
+                    { name: "Patches",        pct: 4.0,  color: "#eab308" },
+                  ].map((d) => (
+                    <div key={d.name} className="flex items-center gap-4">
+                      <span className={`text-[10px] font-bold uppercase w-32 shrink-0 ${c.textPrimary}`}>{d.name}</span>
+                      <div className="flex-1 bg-black/10 dark:bg-white/10 h-2.5">
+                        <div className="h-full rounded-none" style={{ width: `${d.pct}%`, backgroundColor: d.color }} />
+                      </div>
+                      <span className="text-[10px] font-mono font-bold w-10 text-right" style={{ color: d.color }}>{d.pct}%</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ═══════════ TAB: LIVE INSPECTOR ═══════════ */}
           {activeTab === "inspector" && (
             <div className="space-y-6">
-              {/* Presets & Auto-Scan Stream Bar */}
+              {/* Upload mode toggle + presets */}
               <div className={`p-3 border ${c.line} ${c.surface} flex flex-wrap items-center justify-between gap-3 text-xs`}>
-                <div className="flex items-center gap-2 overflow-x-auto pb-1 sm:pb-0">
-                  <span className={`text-[10px] font-bold uppercase tracking-widest flex items-center gap-1 shrink-0 ${isDark ? "text-[#d5ff38]" : "text-emerald-800"}`}>
-                    <Zap size={13} className="fill-current" />
-                    <span>QUICK SPECIMENS:</span>
-                  </span>
+                <div className="flex items-center gap-2 flex-wrap">
+                  {/* Mode Toggle */}
+                  <div className={`flex items-center border ${c.line} text-[10px] font-bold`}>
+                    <button onClick={() => { setUploadMode("single"); setBatchFiles([]); setBatchResults(null); }}
+                      className={`px-3 py-1.5 uppercase transition-colors ${uploadMode === "single" ? (isDark ? "bg-[#d5ff38] text-black" : "bg-slate-900 text-white") : `${c.hover} ${c.textMuted}`}`}>
+                      ◆ SINGLE IMAGE
+                    </button>
+                    <button onClick={() => { setUploadMode("batch"); setFile(null); setResult(null); }}
+                      className={`px-3 py-1.5 uppercase flex items-center gap-1 transition-colors ${uploadMode === "batch" ? (isDark ? "bg-[#d5ff38] text-black" : "bg-slate-900 text-white") : `${c.hover} ${c.textMuted}`}`}>
+                      <Images size={12} />
+                      BATCH UPLOAD
+                    </button>
+                  </div>
 
-                  {SAMPLE_DEFECTS.map((sample) => (
-                    <button
-                      key={sample.name}
-                      onClick={() => loadPresetSample(sample.file)}
-                      className={`px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider border shrink-0 transition-colors flex items-center gap-1.5 ${c.line} ${c.hover} ${c.textPrimary}`}
-                    >
-                      <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: sample.color }} />
-                      <span>{sample.name}</span>
+                  {/* Sample chips */}
+                  <span className={`text-[10px] font-bold uppercase flex items-center gap-1 ${isDark ? "text-[#d5ff38]" : "text-emerald-800"}`}><Zap size={11} className="fill-current" />QUICK LOAD:</span>
+                  {SAMPLE_DEFECTS.map((s) => (
+                    <button key={s.name} onClick={() => loadPresetSample(s.file)}
+                      className={`px-2.5 py-1 text-[10px] font-bold uppercase border shrink-0 transition-colors flex items-center gap-1.5 ${c.line} ${c.hover} ${c.textPrimary}`}>
+                      <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: s.color }} />
+                      {s.name}
                     </button>
                   ))}
                 </div>
 
                 <div className="flex items-center gap-3">
-                  {/* Auto-Scan Live Stream Toggle */}
-                  <button
-                    onClick={() => setAutoScanActive(!autoScanActive)}
-                    className={`px-3 py-1 text-[10px] font-bold uppercase tracking-wider border flex items-center gap-1.5 transition-colors ${
-                      autoScanActive
-                        ? "bg-emerald-600 text-white border-emerald-600 animate-pulse"
-                        : `${c.line} ${c.hover} ${c.textPrimary}`
-                    }`}
-                  >
+                  {/* Auto-Scan */}
+                  <button onClick={() => setAutoScanActive(!autoScanActive)}
+                    className={`px-3 py-1 text-[10px] font-bold uppercase border flex items-center gap-1.5 transition-colors ${autoScanActive ? "bg-emerald-600 text-white border-emerald-600 animate-pulse" : `${c.line} ${c.hover} ${c.textPrimary}`}`}>
                     {autoScanActive ? <Pause size={12} /> : <Play size={12} className="fill-current" />}
-                    <span>{autoScanActive ? "AUTO-STREAMING (ON)" : "AUTO-SCAN STREAM"}</span>
+                    <span>{autoScanActive ? "STREAMING (ON)" : "AUTO-SCAN"}</span>
                   </button>
 
-                  {result && (
+                  {/* View mode (single only) */}
+                  {result && uploadMode === "single" && (
                     <div className={`flex items-center gap-1 border p-0.5 ${c.line}`}>
-                      {[
-                        { mode: "split", label: "SPLIT SLIDER" },
-                        { mode: "annotated", label: "BOXES" },
-                        { mode: "raw", label: "RAW" },
-                        { mode: "contrast", label: "FILTER" },
-                      ].map((m) => (
-                        <button
-                          key={m.mode}
-                          onClick={() => setViewMode(m.mode)}
-                          className={`px-2 py-0.5 text-[9px] font-bold uppercase transition-colors ${
-                            viewMode === m.mode
-                              ? isDark
-                                ? "bg-[#d5ff38] text-black font-black"
-                                : "bg-slate-900 text-white font-black"
-                              : `${c.textMuted} hover:opacity-100`
-                          }`}
-                        >
+                      {[{mode:"split",label:"SPLIT"},{mode:"annotated",label:"BOXES"},{mode:"raw",label:"RAW"},{mode:"contrast",label:"FILTER"}].map((m) => (
+                        <button key={m.mode} onClick={() => setViewMode(m.mode)}
+                          className={`px-2 py-0.5 text-[9px] font-bold uppercase transition-colors ${viewMode === m.mode ? (isDark ? "bg-[#d5ff38] text-black" : "bg-slate-900 text-white") : `${c.textMuted} hover:opacity-100`}`}>
                           {m.label}
                         </button>
                       ))}
                     </div>
                   )}
 
+                  {/* Confidence slider */}
                   <div className="hidden sm:flex items-center gap-2 text-[10px] font-bold uppercase">
-                    <span className={c.textMuted}>CONFIDENCE:</span>
-                    <input
-                      type="range"
-                      min="10"
-                      max="90"
-                      value={confidenceFilter}
+                    <span className={c.textMuted}>CONF:</span>
+                    <input type="range" min="5" max="90" value={confidenceFilter}
                       onChange={(e) => setConfidenceFilter(Number(e.target.value))}
-                      className="w-16 accent-emerald-500 cursor-pointer"
-                    />
-                    <span className={`font-black ${isDark ? "text-[#d5ff38]" : "text-emerald-800"}`}>
-                      {confidenceFilter}%
-                    </span>
+                      className="w-16 accent-emerald-500 cursor-pointer" />
+                    <span className={`font-black ${isDark ? "text-[#d5ff38]" : "text-emerald-800"}`}>{confidenceFilter}%</span>
                   </div>
                 </div>
               </div>
 
-              {/* Core 2-Column Inspector Grid */}
-              <div className="grid lg:grid-cols-12 gap-6 items-start">
-                {/* Left Upload & Actions */}
-                <div className="lg:col-span-4 space-y-5">
-                  <div className={`border ${c.line} ${c.surface} p-5`}>
-                    <div className="flex items-center justify-between pb-3 mb-4 border-b" style={{ borderColor: c.line }}>
-                      <span className={`text-xs font-black uppercase tracking-widest flex items-center gap-2 ${isDark ? "text-[#d5ff38]" : "text-emerald-800"}`}>
-                        <Crosshair size={14} />
-                        <span>SPECIMEN INPUT</span>
-                      </span>
-                      <span className={`text-[9px] uppercase tracking-wider ${c.textMuted}`}>
-                        STAND 04B
-                      </span>
+              {/* ─── SINGLE MODE ─── */}
+              {uploadMode === "single" && (
+                <div className="grid lg:grid-cols-12 gap-6 items-start">
+                  {/* Left — upload + controls */}
+                  <div className="lg:col-span-4 space-y-5">
+                    <div className={`border ${c.line} ${c.surface} p-5`}>
+                      <div className={`flex items-center justify-between pb-3 mb-4 border-b border-current/10`}>
+                        <span className={`text-xs font-black uppercase tracking-widest flex items-center gap-2 ${isDark ? "text-[#d5ff38]" : "text-emerald-800"}`}><Crosshair size={14} />SPECIMEN INPUT</span>
+                        <span className={`text-[9px] uppercase tracking-wider ${c.textMuted}`}>SINGLE FILE</span>
+                      </div>
+
+                      {!file ? (
+                        <label onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
+                          onDragLeave={() => setDragging(false)} onDrop={handleDrop}
+                          className={`border-2 border-dashed p-6 flex flex-col items-center justify-center text-center cursor-pointer transition-all min-h-[200px] ${dragging ? "border-emerald-500 bg-emerald-500/10" : `${c.line} hover:border-emerald-500 ${c.hover}`}`}>
+                          <div className="w-10 h-10 bg-[#d5ff38] text-black font-black flex items-center justify-center mb-3"><ImagePlus size={18} /></div>
+                          <p className={`text-xs font-black uppercase tracking-wider font-sans ${c.textPrimary}`}>DROP IMAGE HERE</p>
+                          <p className={`text-[10px] mt-1.5 uppercase ${c.textMuted}`}>Or click · JPG / PNG / WEBP · max 10 MB</p>
+                          <input type="file" accept="image/*" className="hidden" onChange={handleSingleFileChange} />
+                        </label>
+                      ) : (
+                        <div className="space-y-3">
+                          <div className="relative aspect-[16/10] bg-black border border-white/10 flex items-center justify-center overflow-hidden">
+                            <img src={preview} alt="Specimen" className="max-h-full max-w-full object-contain" />
+                            <button type="button" onClick={() => { setFile(null); setResult(null); setError(""); }}
+                              className="absolute top-2 right-2 bg-black/80 text-white p-1.5 hover:bg-rose-600 transition-colors" title="Remove">
+                              <X size={13} />
+                            </button>
+                            <div className={`absolute top-2 left-2 text-[8px] px-2 py-0.5 font-mono ${isDark ? "bg-black/80 text-[#d5ff38]" : "bg-white/90 text-emerald-800"} border border-white/10`}>STATUS: LOADED</div>
+                          </div>
+                          <p className={`text-[9px] truncate uppercase ${c.textMuted}`}>{file.name}</p>
+                          <label className={`cursor-pointer inline-flex items-center gap-2 text-xs font-bold uppercase ${c.textMuted} hover:text-white`}>
+                            <RefreshCw size={12} /><span>REPLACE</span>
+                            <input type="file" accept="image/*" className="hidden" onChange={handleSingleFileChange} />
+                          </label>
+                        </div>
+                      )}
                     </div>
 
-                    {!file ? (
-                      <label
-                        onDragOver={(e) => {
-                          e.preventDefault();
-                          setDragging(true);
-                        }}
-                        onDragLeave={() => setDragging(false)}
-                        onDrop={handleDrop}
-                        className={`border-2 border-dashed p-6 flex flex-col items-center justify-center text-center cursor-pointer transition-all min-h-[200px] ${
-                          dragging
-                            ? "border-emerald-500 bg-emerald-500/10"
-                            : `${c.line} hover:border-emerald-500 ${c.hover}`
-                        }`}
-                      >
-                        <div className="w-10 h-10 bg-[#d5ff38] text-black font-black flex items-center justify-center mb-3">
-                          <ImagePlus size={18} strokeWidth={2.2} />
-                        </div>
-                        <p className={`text-xs font-black uppercase tracking-wider font-sans ${c.textPrimary}`}>
-                          DROP SPECIMEN IMAGE
-                        </p>
-                        <p className={`text-[10px] mt-1.5 uppercase ${c.textMuted}`}>
-                          Or click to browse (JPG/PNG &lt; 10MB)
-                        </p>
-                        <input
-                          type="file"
-                          accept="image/jpeg,image/png"
-                          className="hidden"
-                          onChange={handleFileChange}
-                        />
-                      </label>
-                    ) : (
-                      <div className="space-y-3">
-                        <div className="relative aspect-[16/10] bg-black border border-white/10 flex items-center justify-center overflow-hidden">
-                          <img
-                            src={preview}
-                            alt="Selected"
-                            className="max-h-full max-w-full object-contain filter contrast-110"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setFile(null);
-                              setResult(null);
-                            }}
-                            className="absolute top-2 right-2 p-1 bg-black/80 text-white/70 hover:text-red-400 border border-white/20"
-                            title="Remove"
-                          >
-                            <X size={14} />
-                          </button>
-                        </div>
-                        <div className="flex items-center justify-between text-[10px]">
-                          <span className={`truncate font-bold uppercase ${c.textPrimary}`}>{file.name}</span>
-                          <span className={c.textMuted}>{(file.size / 1024 / 1024).toFixed(2)} MB</span>
-                        </div>
-                      </div>
-                    )}
+                    {error && <div className={`p-4 border ${c.line} text-xs font-mono`}><span className="text-rose-500 font-bold uppercase">ERROR: </span><span className={c.textPrimary}>{error}</span></div>}
 
-                    {error && (
-                      <div className="mt-3 p-3 border text-xs font-mono uppercase bg-red-500/10 text-red-500 border-red-500/30">
-                        {error}
-                      </div>
-                    )}
-
-                    {/* Execute Button */}
-                    <button
-                      type="button"
-                      onClick={handleAnalyze}
-                      disabled={!file || loading}
-                      className={`mt-4 w-full py-4 text-xs font-black uppercase tracking-widest transition-all flex items-center justify-center gap-3 ${
-                        !file || loading
-                          ? "bg-black/10 dark:bg-white/10 text-slate-400 dark:text-white/30 cursor-not-allowed border"
-                          : "bg-[#d5ff38] text-black hover:bg-[#c2ed20] shadow-xl hover:-translate-y-0.5 border border-black/10"
-                      }`}
-                    >
-                      {loading ? (
-                        <>
-                          <LoaderCircle size={16} className="animate-spin" />
-                          <span>RUNNING YOLO INFERENCE...</span>
-                        </>
-                      ) : (
-                        <>
-                          <Upload size={15} />
-                          <span>EXECUTE OPTICAL RUN</span>
-                          <ArrowUpRight size={15} strokeWidth={2.4} />
-                        </>
-                      )}
+                    {/* Analyze Button */}
+                    <button onClick={handleAnalyze} disabled={!file || loading}
+                      className={`w-full py-4 font-black text-sm uppercase tracking-widest flex items-center justify-center gap-3 transition-colors ${!file || loading ? "opacity-40 cursor-not-allowed bg-white/10" : c.accentButton} border ${!file || loading ? c.line : "border-transparent"}`}>
+                      {loading ? <LoaderCircle size={20} className="animate-spin" /> : <Zap size={20} className="fill-current" />}
+                      {loading ? "SCANNING SURFACE..." : "EXECUTE OPTICAL RUN ⚡"}
                     </button>
+
+                    {/* Verdict Banner */}
+                    {result && !loading && (
+                      <div className={`p-4 border ${currentVerdict.border} ${currentVerdict.bg} space-y-2`}>
+                        <div className="flex items-center justify-between">
+                          <span className={`text-[10px] font-black uppercase tracking-widest ${currentVerdict.colorText}`}>{currentVerdict.grade}</span>
+                          <span className={`text-[9px] px-2 py-0.5 font-black uppercase ${currentVerdict.badge}`}>{currentVerdict.status}</span>
+                        </div>
+                        <p className={`text-xs font-bold uppercase ${currentVerdict.colorText}`}>{currentVerdict.title}</p>
+                        <p className={`text-[10px] uppercase ${c.textMuted}`}>{currentVerdict.action}</p>
+                        {result.latency_ms && <p className={`text-[9px] uppercase font-mono ${c.textMuted}`}>NEURAL LATENCY: {result.latency_ms.toFixed(1)} MS · MODEL: YOLO11-IMPROVED</p>}
+                      </div>
+                    )}
+
+                    {/* Export */}
+                    {result && !loading && (
+                      <button onClick={exportCSV} className={`w-full py-2.5 border text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 ${c.line} ${c.hover} ${c.textPrimary}`}>
+                        <FileSpreadsheet size={14} />EXPORT AUDIT CSV
+                      </button>
+                    )}
                   </div>
 
-                  {/* Quality Verdict Banner */}
-                  {result && (
-                    <div className={`border p-4 ${currentVerdict.border} ${currentVerdict.bg}`}>
-                      <div className="flex items-center justify-between mb-1.5">
-                        <span className={`text-xs font-black uppercase tracking-wider ${currentVerdict.colorText}`}>
-                          {currentVerdict.title}
-                        </span>
-                        <span className={`px-2 py-0.5 text-[9px] font-black uppercase ${currentVerdict.badge}`}>
-                          {currentVerdict.grade}
-                        </span>
+                  {/* Right — viewport */}
+                  <div className="lg:col-span-8 space-y-6">
+                    {!result && !loading && (
+                      <div className={`aspect-video border-2 border-dashed ${c.line} flex flex-col items-center justify-center text-center ${c.surface}`}>
+                        <Scan size={48} className={`${c.textMuted} mb-4`} />
+                        <p className={`text-sm font-black uppercase ${c.textPrimary}`}>OPTICAL VIEWPORT IDLE</p>
+                        <p className={`text-xs mt-2 uppercase ${c.textMuted}`}>Load a specimen and run inspection</p>
                       </div>
-                      <p className={`text-[10px] leading-relaxed uppercase opacity-80 mb-3 font-mono ${c.textPrimary}`}>
-                        {currentVerdict.action}
-                      </p>
-                      <button
-                        type="button"
-                        onClick={exportCSV}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-black/20 dark:border-white/20 text-[10px] font-bold uppercase tracking-wider"
-                      >
-                        <FileSpreadsheet size={13} className={isDark ? "text-[#d5ff38]" : "text-emerald-700"} />
-                        <span>EXPORT AUDIT CSV</span>
-                      </button>
+                    )}
+
+                    {loading && (
+                      <div className={`aspect-video border ${c.line} ${c.surface} flex flex-col items-center justify-center`}>
+                        <LoaderCircle size={40} className="animate-spin text-[#d5ff38] mb-6" />
+                        <p className={`text-xs font-black uppercase tracking-widest ${isDark ? "text-[#d5ff38]" : "text-emerald-800"}`}>NEURAL FORWARD PASS</p>
+                        <h3 className={`text-2xl font-black uppercase font-sans mt-2 ${c.textPrimary}`}>SCANNING SURFACE…</h3>
+                        <div className="w-48 bg-white/10 h-1 overflow-hidden mt-6"><div className="bg-[#d5ff38] h-full w-2/3 animate-pulse" /></div>
+                      </div>
+                    )}
+
+                    {result && !loading && (
+                      <div className="space-y-4">
+                        {/* Split / Annotated / Raw */}
+                        {viewMode === "split" && (
+                          <div ref={sliderRef} className="relative aspect-video bg-black overflow-hidden cursor-col-resize border border-white/20"
+                            onMouseMove={(e) => isDraggingSlider && handleSliderMove(e)}
+                            onMouseUp={() => setIsDraggingSlider(false)}
+                            onMouseLeave={() => setIsDraggingSlider(false)}
+                            onTouchMove={handleSliderMove}
+                            onTouchEnd={() => setIsDraggingSlider(false)}>
+                            <img src={preview} alt="Raw" className="absolute inset-0 w-full h-full object-contain" />
+                            <div className="absolute inset-0 overflow-hidden" style={{ clipPath: `inset(0 ${100 - sliderPos}% 0 0)` }}>
+                              <img src={result.result_image_url} alt="Annotated" className="absolute inset-0 w-full h-full object-contain" />
+                            </div>
+                            <div className="absolute top-0 bottom-0 w-0.5 bg-[#d5ff38] shadow-xl" style={{ left: `${sliderPos}%` }}>
+                              <div className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-8 h-8 bg-[#d5ff38] text-black flex items-center justify-center font-black text-sm cursor-grab shadow-xl"
+                                onMouseDown={(e) => { e.preventDefault(); setIsDraggingSlider(true); }}
+                                onTouchStart={() => setIsDraggingSlider(true)}>⟺</div>
+                            </div>
+                            <div className="absolute top-3 left-3 text-[9px] font-black px-2 py-1 bg-black/80 text-white">RAW</div>
+                            <div className="absolute top-3 right-3 text-[9px] font-black px-2 py-1 bg-[#d5ff38] text-black">YOLO PREDICTION</div>
+                          </div>
+                        )}
+                        {viewMode === "annotated" && <div className="aspect-video bg-black border border-white/20 overflow-hidden flex items-center justify-center"><img src={result.result_image_url} alt="Annotated" className="max-h-full max-w-full object-contain" /></div>}
+                        {viewMode === "raw" && <div className="aspect-video bg-black border border-white/20 overflow-hidden flex items-center justify-center"><img src={preview} alt="Raw" className="max-h-full max-w-full object-contain" /></div>}
+                        {viewMode === "contrast" && <div className="aspect-video bg-black border border-white/20 overflow-hidden flex items-center justify-center"><img src={result.result_image_url} alt="Contrast" className="max-h-full max-w-full object-contain filter contrast-150 brightness-110" /></div>}
+
+                        {/* Detection Cards */}
+                        {filteredDetections.length > 0 ? (
+                          <div className="space-y-2">
+                            <p className={`text-[10px] font-black uppercase tracking-wider ${c.textMuted}`}>{filteredDetections.length} DEFECT{filteredDetections.length !== 1 ? "S" : ""} DETECTED ABOVE {confidenceFilter}% CONFIDENCE</p>
+                            {filteredDetections.map((d, i) => (
+                              <div key={i} className={`border ${c.line} ${c.surface} p-3 flex items-center justify-between`}>
+                                <div className="flex items-center gap-3">
+                                  <span className="w-2 h-2 rounded-full bg-[#ff5436]" />
+                                  <div>
+                                    <p className={`text-xs font-black uppercase ${c.textPrimary}`}>{prettyName(d.defect)}</p>
+                                    <p className={`text-[9px] font-mono ${c.textMuted}`}>[{d.box?.map((v) => v.toFixed(0)).join(", ")}]</p>
+                                  </div>
+                                </div>
+                                <span className={`text-xs font-black font-mono ${confidencePercent(d.confidence) >= 85 ? "text-emerald-500" : "text-amber-500"}`}>{confidencePercent(d.confidence).toFixed(1)}%</span>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className={`p-6 text-center border border-dashed text-xs uppercase ${c.textMuted}`} style={{ borderColor: "currentColor" }}>
+                            {result ? "NO DEFECTS ABOVE CONFIDENCE THRESHOLD" : "AWAITING INSPECTION RUN"}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* ─── BATCH MODE ─── */}
+              {uploadMode === "batch" && (
+                <div className="space-y-5">
+                  {/* Drop Zone */}
+                  <label onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
+                    onDragLeave={() => setDragging(false)} onDrop={handleDrop}
+                    className={`border-2 border-dashed p-8 flex flex-col items-center justify-center text-center cursor-pointer transition-all ${dragging ? "border-emerald-500 bg-emerald-500/10" : `${c.line} hover:border-emerald-500 ${c.hover}`}`}>
+                    <div className="w-12 h-12 bg-[#d5ff38] text-black font-black flex items-center justify-center mb-3"><Images size={22} /></div>
+                    <p className={`text-sm font-black uppercase tracking-wider font-sans ${c.textPrimary}`}>DROP MULTIPLE IMAGES</p>
+                    <p className={`text-[11px] mt-2 uppercase ${c.textMuted}`}>Or click to browse — JPG / PNG / WEBP · max 10 MB each</p>
+                    <p className={`text-[10px] mt-1 ${c.textMuted}`}>Select as many files as you want</p>
+                    <input type="file" accept="image/*" multiple className="hidden" onChange={handleBatchFileChange} />
+                  </label>
+
+                  {/* File List */}
+                  {batchFiles.length > 0 && (
+                    <div className={`border ${c.line} ${c.surface} p-5 space-y-3`}>
+                      <div className="flex items-center justify-between">
+                        <span className={`text-xs font-black uppercase ${isDark ? "text-[#d5ff38]" : "text-emerald-800"}`}>{batchFiles.length} FILES QUEUED</span>
+                        <div className="flex gap-2">
+                          <label className={`px-3 py-1 text-[10px] font-bold uppercase cursor-pointer border ${c.line} ${c.hover} ${c.textPrimary}`}>
+                            + ADD MORE
+                            <input type="file" accept="image/*" multiple className="hidden" onChange={handleBatchFileChange} />
+                          </label>
+                          <button onClick={() => { setBatchFiles([]); setBatchResults(null); }}
+                            className={`px-3 py-1 text-[10px] font-bold uppercase border text-rose-500 border-rose-500/30 hover:bg-rose-500/10`}>CLEAR ALL</button>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2">
+                        {batchFiles.map((f, i) => (
+                          <div key={i} className={`relative border ${c.line} aspect-square flex flex-col items-center justify-center overflow-hidden group`}>
+                            <img src={URL.createObjectURL(f)} alt={f.name} className="w-full h-full object-cover" />
+                            <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-1 p-1">
+                              <p className="text-[8px] text-white font-mono text-center truncate w-full px-1">{f.name}</p>
+                              <button onClick={() => setBatchFiles((p) => p.filter((_, j) => j !== i))}
+                                className="w-6 h-6 bg-rose-600 text-white flex items-center justify-center text-xs">✕</button>
+                            </div>
+                            {/* Result overlay */}
+                            {batchResults?.results?.[i] && (
+                              <div className={`absolute bottom-0 left-0 right-0 text-[8px] font-black uppercase text-center py-0.5 ${batchResults.results[i].verdict === "PASS" ? "bg-emerald-600 text-white" : batchResults.results[i].verdict === "REJECT" ? "bg-rose-600 text-white" : "bg-amber-500 text-black"}`}>
+                                {batchResults.results[i].verdict}
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   )}
-                </div>
 
-                {/* Right Optical Viewport */}
-                <div className="lg:col-span-8 space-y-5">
-                  <div className={`border ${c.line} ${c.surface} p-5`}>
-                    <div className="flex items-center justify-between pb-3 mb-4 border-b" style={{ borderColor: c.line }}>
-                      <span className={`text-xs font-black uppercase tracking-widest flex items-center gap-2 ${isDark ? "text-[#d5ff38]" : "text-emerald-800"}`}>
-                        <Scan size={14} />
-                        <span>HIGH-RESOLUTION OPTICAL VIEWPORT</span>
-                      </span>
-                      <span className={`text-[10px] font-bold uppercase ${c.textMuted}`}>
-                        FOV: 200 × 200 MM
-                      </span>
-                    </div>
+                  {batchError && <div className={`p-4 border ${c.line} text-xs font-mono`}><span className="text-rose-500 font-bold">ERROR: </span><span className={c.textPrimary}>{batchError}</span></div>}
 
-                    {/* Viewport Screen */}
-                    <div className="relative aspect-square sm:aspect-[16/10] w-full bg-[#070805] border border-white/20 overflow-hidden select-none flex items-center justify-center shadow-2xl">
-                      {!file && !result && (
-                        <div className="text-center p-8 opacity-40">
-                          <Crosshair size={40} className="text-[#d5ff38] mx-auto mb-3 animate-pulse" />
-                          <p className="text-xs font-black uppercase tracking-widest text-white">
-                            OPTICAL VIEWPORT READY // NO SPECIMEN LOADED
-                          </p>
-                          <p className="text-[10px] uppercase text-white/70 mt-1">
-                            Click a preset above or drop an image on the left to begin.
-                          </p>
-                        </div>
-                      )}
+                  {/* Run Button */}
+                  <button onClick={handleBatchAnalyze} disabled={batchFiles.length === 0 || batchLoading}
+                    className={`w-full py-4 font-black text-sm uppercase tracking-widest flex items-center justify-center gap-3 transition-colors border ${batchFiles.length === 0 || batchLoading ? "opacity-40 cursor-not-allowed bg-white/10 " + c.line : c.accentButton + " border-transparent"}`}>
+                    {batchLoading ? <LoaderCircle size={20} className="animate-spin" /> : <Zap size={20} className="fill-current" />}
+                    {batchLoading ? `SCANNING ${batchFiles.length} IMAGES…` : `RUN BATCH INSPECTION (${batchFiles.length} FILES) ⚡`}
+                  </button>
 
-                      {loading && (
-                        <div className="text-center p-8">
-                          <LoaderCircle size={40} className="animate-spin text-[#d5ff38] mx-auto mb-4" />
-                          <p className="text-xs font-black uppercase tracking-widest text-white">
-                            EXTRACTING MULTI-SCALE CONVOLUTIONAL FEATURES...
-                          </p>
-                        </div>
-                      )}
+                  {/* Batch Results */}
+                  {batchResults && (
+                    <div className="space-y-4">
+                      {/* Summary Bar */}
+                      <div className={`p-5 border ${c.line} ${c.surface} grid grid-cols-2 sm:grid-cols-4 gap-4`}>
+                        <div><div className={`text-[10px] font-bold uppercase ${c.textMuted}`}>TOTAL FILES</div><div className={`text-2xl font-black mt-1 ${c.textPrimary}`}>{batchResults.total_files}</div></div>
+                        <div><div className={`text-[10px] font-bold uppercase ${c.textMuted}`}>PASSED</div><div className="text-2xl font-black mt-1 text-emerald-500">{batchResults.passed_count}</div></div>
+                        <div><div className={`text-[10px] font-bold uppercase ${c.textMuted}`}>REJECTED</div><div className="text-2xl font-black mt-1 text-rose-500">{batchResults.rejected_count}</div></div>
+                        <div><div className={`text-[10px] font-bold uppercase ${c.textMuted}`}>SUCCESS RATE</div><div className={`text-2xl font-black mt-1 ${batchResults.success_rate >= 90 ? "text-emerald-500" : "text-amber-500"}`}>{batchResults.success_rate}%</div></div>
+                      </div>
 
-                      {file && !result && !loading && (
-                        <div className="relative w-full h-full flex items-center justify-center bg-black">
-                          <img
-                            src={preview}
-                            alt="Raw Specimen"
-                            className="max-h-full max-w-full object-contain filter contrast-110"
-                          />
-                          <div className="absolute top-3 left-3 text-[9px] bg-black/80 px-2 py-1 text-[#d5ff38] border border-white/20">
-                            RAW OPTICAL SPECIMEN // AWAITING RUN
-                          </div>
-                        </div>
-                      )}
-
-                      {result && !loading && (
-                        <div
-                          ref={sliderRef}
-                          onMouseMove={(e) => {
-                            if (e.buttons === 1 || isDraggingSlider) handleSliderMove(e);
-                          }}
-                          onTouchMove={handleSliderMove}
-                          onMouseDown={() => setIsDraggingSlider(true)}
-                          onMouseUp={() => setIsDraggingSlider(false)}
-                          className="relative w-full h-full flex items-center justify-center bg-black cursor-ew-resize group"
-                        >
-                          <img
-                            src={preview}
-                            alt="Raw Specimen"
-                            className={`max-h-full max-w-full object-contain filter ${
-                              viewMode === "contrast"
-                                ? "invert contrast-200 grayscale"
-                                : "contrast-110"
-                            }`}
-                          />
-
-                          <div
-                            style={{
-                              clipPath:
-                                viewMode === "raw"
-                                  ? "polygon(0 0, 0 0, 0 100%, 0 100%)"
-                                  : viewMode === "annotated" || viewMode === "contrast"
-                                  ? "polygon(0 0, 100% 0, 100% 100%, 0 100%)"
-                                  : `polygon(0 0, ${sliderPos}% 0, ${sliderPos}% 100%, 0 100%)`,
-                            }}
-                            className="absolute inset-0 flex items-center justify-center pointer-events-none"
-                          >
-                            <img
-                              src={result.result_image_url}
-                              alt="YOLO Output"
-                              className="max-h-full max-w-full object-contain filter contrast-110"
-                            />
-                          </div>
-
-                          {viewMode === "split" && (
-                            <div
-                              style={{ left: `${sliderPos}%` }}
-                              className="absolute top-0 bottom-0 w-0.5 bg-[#d5ff38] shadow-[0_0_12px_2px_#d5ff38] pointer-events-none"
-                            >
-                              <div className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-7 h-7 bg-[#d5ff38] text-black font-black flex items-center justify-center text-[10px] rounded-full shadow-lg">
-                                ◀▶
+                      {/* Per-image results */}
+                      <div className="space-y-2">
+                        {batchResults.results.map((r, i) => (
+                          <div key={i} className={`border ${c.line} ${c.surface} p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3`}>
+                            <div className="flex items-center gap-3">
+                              {r.result_image_url && <img src={r.result_image_url} alt="" className="w-16 h-12 object-cover border border-white/10" />}
+                              <div>
+                                <p className={`text-xs font-black uppercase ${c.textPrimary}`}>{r.filename}</p>
+                                <p className={`text-[10px] font-mono ${c.textMuted}`}>{r.count} defect{r.count !== 1 ? "s" : ""} · {r.latency_ms?.toFixed(1)} ms · {r.grade}</p>
                               </div>
                             </div>
-                          )}
-
-                          <div className="absolute top-3 left-3 text-[8px] font-black uppercase tracking-wider bg-black/80 text-white px-2.5 py-1 border border-white/20">
-                            {viewMode === "split" ? "SPLIT COMPARE // DRAG SLIDER" : viewMode.toUpperCase()}
-                          </div>
-
-                          <div className="absolute bottom-3 right-3 text-[9px] font-mono font-bold uppercase tracking-wider bg-black/80 text-[#d5ff38] px-2.5 py-1 border border-[#d5ff38]/40">
-                            FOUND: {filteredDetections.length} DEFECTS
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Localized Defect Annotations Grid */}
-                  <div className={`border ${c.line} ${c.surface} p-5`}>
-                    <div className="flex items-center justify-between pb-3 mb-4 border-b" style={{ borderColor: c.line }}>
-                      <span className={`text-xs font-black uppercase tracking-widest flex items-center gap-2 ${isDark ? "text-[#d5ff38]" : "text-emerald-800"}`}>
-                        <Activity size={14} />
-                        <span>LOCALIZED ANNOTATIONS ({filteredDetections.length})</span>
-                      </span>
-                      <span className={`text-[10px] uppercase ${c.textMuted}`}>
-                        {uniqueClasses} UNIQUE CLASSES
-                      </span>
-                    </div>
-
-                    {filteredDetections.length > 0 ? (
-                      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                        {filteredDetections.map((item, idx) => (
-                          <div
-                            key={idx}
-                            className={`p-3 border text-xs transition-colors ${c.line} ${c.surfaceRaised}`}
-                          >
-                            <div className="flex items-center justify-between mb-1.5">
-                              <span className={`text-[9px] font-mono ${c.textMuted}`}>
-                                #{String(idx + 1).padStart(2, "0")}
-                              </span>
-                              <span className={`text-[10px] font-black ${isDark ? "text-[#d5ff38]" : "text-emerald-700"}`}>
-                                {confidencePercent(item.confidence).toFixed(1)}%
-                              </span>
-                            </div>
-                            <div className={`font-black uppercase tracking-tight text-sm font-sans truncate ${c.textPrimary}`}>
-                              {prettyName(item.defect)}
-                            </div>
-                            <div className={`mt-2 pt-2 border-t border-black/10 dark:border-white/10 flex items-center justify-between text-[9px] font-mono ${c.textMuted}`}>
-                              <span>BOUNDING BOX:</span>
-                              <span>[{item.box?.map((v) => Math.round(v)).join(", ")}]</span>
+                            <div className="flex items-center gap-3">
+                              {r.detections?.slice(0, 3).map((d, j) => (
+                                <span key={j} className={`text-[9px] px-2 py-0.5 border ${c.line} font-bold uppercase ${c.textSecondary}`}>{prettyName(d.defect)}</span>
+                              ))}
+                              <span className={`text-xs px-3 py-1 font-black uppercase ${r.verdict === "PASS" ? "bg-emerald-600 text-white" : r.verdict === "REJECT" ? "bg-rose-600 text-white" : "bg-amber-500 text-black"}`}>{r.verdict}</span>
                             </div>
                           </div>
                         ))}
                       </div>
-                    ) : (
-                      <div className={`p-8 text-center border border-dashed text-xs uppercase ${c.textMuted}`} style={{ borderColor: c.line }}>
-                        {result
-                          ? "NO DEFECTS DETECTED ABOVE CONFIDENCE THRESHOLD"
-                          : "AWAITING SPECIMEN INSPECTION RUN"}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
 
-          {/* ================= TAB 2: QUALITY YIELD & METRICS INTELLIGENCE ================= */}
-          {activeTab === "analytics" && (
-            <div className="space-y-6">
-              {/* Header */}
-              <div className={`p-5 border ${c.line} ${c.surface} flex flex-col sm:flex-row sm:items-center justify-between gap-4`}>
-                <div>
-                  <h2 className={`text-lg font-black uppercase tracking-tight font-sans ${c.textPrimary}`}>
-                    QUALITY YIELD & REAL-TIME SUCCESS INTELLIGENCE
-                  </h2>
-                  <p className={`text-xs uppercase mt-1 ${c.textMuted}`}>
-                    Continuous telemetry aggregated across rolling stands 01 through 04.
-                  </p>
-                </div>
-                <div className="flex items-center gap-3">
-                  <span className="px-3 py-1 bg-emerald-500/10 text-emerald-600 dark:text-[#d5ff38] border border-emerald-500/30 text-[10px] font-bold uppercase">
-                    LIVE DATASTREAM
-                  </span>
-                  <button
-                    onClick={() => setActiveTab("inspector")}
-                    className={`px-3.5 py-1.5 text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5 transition-colors border shadow-sm ${c.accentButton}`}
-                  >
-                    <Crosshair size={13} strokeWidth={2.5} />
-                    <span>LAUNCH LIVE INSPECTOR ↗</span>
-                  </button>
-                </div>
-              </div>
-
-              {/* 4 Hero KPI Cards with Success Rate Gauge */}
-              <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                {/* 1. Success Rate Circular Gauge */}
-                <div className={`p-5 border ${c.line} ${c.surface} flex items-center justify-between`}>
-                  <div>
-                    <div className={`text-[10px] font-bold uppercase tracking-wider ${c.textMuted}`}>
-                      OVERALL SUCCESS RATE
-                    </div>
-                    <div className="text-3xl font-black font-sans mt-1 text-emerald-500">
-                      94.8%
-                    </div>
-                    <div className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold flex items-center gap-1 mt-1">
-                      <TrendingUp size={12} />
-                      <span>+1.4% vs LAST WEEK</span>
-                    </div>
-                  </div>
-
-                  {/* SVG Radial Gauge */}
-                  <div className="relative w-16 h-16 shrink-0">
-                    <svg className="w-full h-full -rotate-90" viewBox="0 0 100 100">
-                      <circle
-                        cx="50"
-                        cy="50"
-                        r="40"
-                        className="stroke-black/10 dark:stroke-white/10"
-                        strokeWidth="10"
-                        fill="transparent"
-                      />
-                      <circle
-                        cx="50"
-                        cy="50"
-                        r="40"
-                        className="stroke-emerald-500"
-                        strokeWidth="10"
-                        strokeDasharray="251.3"
-                        strokeDashoffset="13"
-                        strokeLinecap="round"
-                        fill="transparent"
-                      />
-                    </svg>
-                    <div className="absolute inset-0 flex items-center justify-center text-[11px] font-black font-sans">
-                      95%
-                    </div>
-                  </div>
-                </div>
-
-                {/* 2. Total Inspected Today */}
-                <div className={`p-5 border ${c.line} ${c.surface}`}>
-                  <div className={`text-[10px] font-bold uppercase tracking-wider ${c.textMuted}`}>
-                    TOTAL COILS SCANNED
-                  </div>
-                  <div className={`text-3xl font-black font-sans mt-1 ${c.textPrimary}`}>
-                    1,428
-                  </div>
-                  <div className={`text-[10px] mt-1 uppercase ${c.textMuted}`}>
-                    Target: 1,500 Coils / Shift
-                  </div>
-                </div>
-
-                {/* 3. Rejection / Quarantine Rate */}
-                <div className={`p-5 border ${c.line} ${c.surface}`}>
-                  <div className={`text-[10px] font-bold uppercase tracking-wider ${c.textMuted}`}>
-                    CRITICAL REJECTION RATE
-                  </div>
-                  <div className="text-3xl font-black font-sans mt-1 text-rose-500">
-                    5.2%
-                  </div>
-                  <div className="text-[10px] text-emerald-500 font-bold flex items-center gap-1 mt-1">
-                    <TrendingDown size={12} />
-                    <span>-0.8% REDUCTION</span>
-                  </div>
-                </div>
-
-                {/* 4. Inference Speed & MTBF */}
-                <div className={`p-5 border ${c.line} ${c.surface}`}>
-                  <div className={`text-[10px] font-bold uppercase tracking-wider ${c.textMuted}`}>
-                    INFERENCE LATENCY
-                  </div>
-                  <div className={`text-3xl font-black font-sans mt-1 ${isDark ? "text-[#d5ff38]" : "text-emerald-700"}`}>
-                    18.4 MS
-                  </div>
-                  <div className={`text-[10px] mt-1 uppercase ${c.textMuted}`}>
-                    SUB-FRAME 60 FPS INLINE
-                  </div>
-                </div>
-              </div>
-
-              {/* 2 Large Industrial Graphs Grid */}
-              <div className="grid lg:grid-cols-12 gap-6">
-                {/* Graph 1: 7-Day Inspection Throughput & Success Rate Trend */}
-                <div className={`lg:col-span-8 p-6 border ${c.line} ${c.surface} flex flex-col justify-between`}>
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-4 mb-4 border-b gap-2" style={{ borderColor: c.line }}>
-                    <div>
-                      <h3 className={`text-xs font-black uppercase tracking-wider ${c.textPrimary} flex items-center gap-2`}>
-                        <TrendingUp size={14} className="text-emerald-500" />
-                        <span>7-DAY INSPECTION VOLUME & SUCCESS RATE TREND</span>
-                      </h3>
-                      <p className={`text-[10px] uppercase mt-0.5 ${c.textMuted}`}>
-                        Coils passed vs rejected across rolling line 04
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-4 text-[10px] font-bold">
-                      <span className="flex items-center gap-1.5 text-emerald-500">
-                        <span className="w-2.5 h-2.5 bg-emerald-500 rounded-sm" />
-                        PASSED
-                      </span>
-                      <span className="flex items-center gap-1.5 text-rose-500">
-                        <span className="w-2.5 h-2.5 bg-rose-500 rounded-sm" />
-                        REJECTED
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* SVG Trend Line / Area Chart */}
-                  <div className="relative aspect-[21/9] w-full pt-4">
-                    <svg className="w-full h-full overflow-visible" viewBox="0 0 700 200">
-                      <defs>
-                        <linearGradient id="areaGradient" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stopColor="#10b981" stopOpacity="0.35" />
-                          <stop offset="100%" stopColor="#10b981" stopOpacity="0.0" />
-                        </linearGradient>
-                      </defs>
-
-                      {/* Horizontal Grid lines */}
-                      <line x1="0" y1="40" x2="700" y2="40" stroke="currentColor" className="opacity-10" strokeDasharray="3 3" />
-                      <line x1="0" y1="90" x2="700" y2="90" stroke="currentColor" className="opacity-10" strokeDasharray="3 3" />
-                      <line x1="0" y1="140" x2="700" y2="140" stroke="currentColor" className="opacity-10" strokeDasharray="3 3" />
-                      <line x1="0" y1="180" x2="700" y2="180" stroke="currentColor" className="opacity-20" />
-
-                      {/* Area Fill */}
-                      <polygon
-                        points="0,180 50,110 150,85 250,60 350,90 450,45 550,75 650,30 700,50 700,180 0,180"
-                        fill="url(#areaGradient)"
-                      />
-
-                      {/* Trend Curve */}
-                      <polyline
-                        points="50,110 150,85 250,60 350,90 450,45 550,75 650,30"
-                        fill="none"
-                        stroke="#10b981"
-                        strokeWidth="3.5"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
-
-                      {/* Reject Bar Line */}
-                      <polyline
-                        points="50,165 150,162 250,170 350,160 450,155 550,168 650,172"
-                        fill="none"
-                        stroke="#ef4444"
-                        strokeWidth="2"
-                        strokeDasharray="4 4"
-                      />
-
-                      {/* Data Point Dots & Labels */}
-                      {[
-                        { x: 50, y: 110, rate: "94.3%" },
-                        { x: 150, y: 85, rate: "94.7%" },
-                        { x: 250, y: 60, rate: "96.5%" },
-                        { x: 350, y: 90, rate: "94.8%" },
-                        { x: 450, y: 45, rate: "93.9%" },
-                        { x: 550, y: 75, rate: "95.2%" },
-                        { x: 650, y: 30, rate: "95.1%" },
-                      ].map((pt, i) => (
-                        <g key={i}>
-                          <circle cx={pt.x} cy={pt.y} r="5" className="fill-[#10b981] stroke-black dark:stroke-white" strokeWidth="2" />
-                          <text x={pt.x} y={pt.y - 10} textAnchor="middle" className="text-[10px] font-bold fill-current font-mono">
-                            {pt.rate}
-                          </text>
-                        </g>
-                      ))}
-                    </svg>
-
-                    {/* X-Axis Day Labels */}
-                    <div className="flex justify-between text-[10px] font-mono font-bold mt-2 uppercase opacity-60 px-4">
-                      {TREND_DAYS.map((d) => (
-                        <span key={d.day}>{d.day} ({d.total})</span>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Graph 2: Production Shifts Stacked Breakdown */}
-                <div className={`lg:col-span-4 p-6 border ${c.line} ${c.surface} flex flex-col justify-between`}>
-                  <div className="pb-4 mb-4 border-b" style={{ borderColor: c.line }}>
-                    <h3 className={`text-xs font-black uppercase tracking-wider ${c.textPrimary}`}>
-                      SHIFT PRODUCTION DISTRIBUTION
-                    </h3>
-                    <p className={`text-[10px] uppercase mt-0.5 ${c.textMuted}`}>
-                      Pass vs Reject ratio by mill crew
-                    </p>
-                  </div>
-
-                  <div className="space-y-5">
-                    {[
-                      { shift: "SHIFT A (06:00 - 14:00)", pass: 520, reject: 32, rate: "94.2%" },
-                      { shift: "SHIFT B (14:00 - 22:00)", pass: 490, reject: 28, rate: "94.6%" },
-                      { shift: "SHIFT C (22:00 - 06:00)", pass: 418, reject: 14, rate: "96.7%" },
-                    ].map((shift, idx) => (
-                      <div key={idx} className="space-y-1.5">
-                        <div className="flex justify-between text-xs font-bold uppercase">
-                          <span className={c.textPrimary}>{shift.shift}</span>
-                          <span className="text-emerald-500 font-mono">{shift.rate}</span>
-                        </div>
-                        <div className="w-full bg-black/10 dark:bg-white/10 h-3 flex overflow-hidden">
-                          <div
-                            className="bg-emerald-500 h-full"
-                            style={{ width: `${(shift.pass / (shift.pass + shift.reject)) * 100}%` }}
-                            title={`Passed: ${shift.pass}`}
-                          />
-                          <div
-                            className="bg-rose-500 h-full"
-                            style={{ width: `${(shift.reject / (shift.pass + shift.reject)) * 100}%` }}
-                            title={`Rejected: ${shift.reject}`}
-                          />
-                        </div>
-                        <div className="flex justify-between text-[9px] font-mono opacity-50 uppercase">
-                          <span>Passed: {shift.pass}</span>
-                          <span>Quarantined: {shift.reject}</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-
-                  <div className="pt-4 border-t border-black/10 dark:border-white/10 text-[10px] uppercase font-bold flex justify-between">
-                    <span className={c.textMuted}>TOTAL ROLLS TODAY:</span>
-                    <span className={c.textPrimary}>1,502 UNITS</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Spatial Defect Heatmap & Class Breakdown Matrix */}
-              <div className="grid lg:grid-cols-12 gap-6">
-                {/* Defect Incidence Profiles */}
-                <div className={`lg:col-span-7 p-6 border ${c.line} ${c.surface}`}>
-                  <h3 className={`text-xs font-black uppercase tracking-wider mb-5 ${c.textPrimary}`}>
-                    DEFECT INCIDENCE PROFILES ACROSS NEU-DET (1,799 BENCHMARK SAMPLES)
-                  </h3>
-
-                  <div className="space-y-4">
-                    {[
-                      { name: "Crazing (Thermal Micro-Fissures)", percent: 18.2, count: 300, severity: "HIGH", color: "bg-rose-500" },
-                      { name: "Inclusion (Slag / Oxide Impurities)", percent: 16.5, count: 300, severity: "CRITICAL", color: "bg-rose-600" },
-                      { name: "Patches (Surface Scabs & Overlaps)", percent: 14.8, count: 300, severity: "MEDIUM", color: "bg-amber-500" },
-                      { name: "Pitted Surface (Cavitation / Etch)", percent: 17.1, count: 300, severity: "HIGH", color: "bg-sky-500" },
-                      { name: "Rolled-in Scale (Embedded Iron Oxide)", percent: 18.9, count: 300, severity: "HIGH", color: "bg-purple-500" },
-                      { name: "Scratches (Guide Roller Gouges)", percent: 14.5, count: 300, severity: "MEDIUM", color: "bg-emerald-500" },
-                    ].map((bar, idx) => (
-                      <div key={idx} className="space-y-1.5">
-                        <div className="flex justify-between text-xs font-bold uppercase">
-                          <span className={c.textPrimary}>{bar.name}</span>
-                          <span className={c.textMuted}>{bar.count} IMAGES ({bar.percent}%)</span>
-                        </div>
-                        <div className="w-full bg-black/10 dark:bg-white/10 h-2.5 overflow-hidden">
-                          <div
-                            className={`h-full ${bar.color}`}
-                            style={{ width: `${bar.percent * 4.5}%` }}
-                          />
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Spatial Strip Width Heatmap */}
-                <div className={`lg:col-span-5 p-6 border ${c.line} ${c.surface} flex flex-col justify-between`}>
-                  <div>
-                    <h3 className={`text-xs font-black uppercase tracking-wider mb-2 ${c.textPrimary}`}>
-                      STRIP WIDTH SPATIAL DEFECT HEATMAP
-                    </h3>
-                    <p className={`text-[10px] uppercase mb-6 ${c.textMuted}`}>
-                      Distribution of defect coordinates across steel coil transversal cross-section
-                    </p>
-
-                    <div className="grid grid-cols-3 gap-3 text-center">
-                      <div className={`p-4 border ${c.line} ${c.surfaceRaised}`}>
-                        <div className="text-[10px] font-bold uppercase text-emerald-500">LEFT EDGE</div>
-                        <div className="text-2xl font-black mt-1 font-sans">14%</div>
-                        <div className={`text-[9px] uppercase mt-1 ${c.textMuted}`}>Zone 0–60mm</div>
-                      </div>
-                      <div className={`p-4 border-2 border-rose-500/50 bg-rose-500/10`}>
-                        <div className="text-[10px] font-bold uppercase text-rose-500">CENTER BELT</div>
-                        <div className="text-2xl font-black mt-1 font-sans text-rose-500">64%</div>
-                        <div className={`text-[9px] uppercase mt-1 ${c.textMuted}`}>Zone 60–140mm</div>
-                      </div>
-                      <div className={`p-4 border ${c.line} ${c.surfaceRaised}`}>
-                        <div className="text-[10px] font-bold uppercase text-amber-500">RIGHT EDGE</div>
-                        <div className="text-2xl font-black mt-1 font-sans">22%</div>
-                        <div className={`text-[9px] uppercase mt-1 ${c.textMuted}`}>Zone 140–200mm</div>
-                      </div>
-                    </div>
-
-                    <p className={`text-[10px] uppercase leading-relaxed mt-5 font-mono ${c.textMuted}`}>
-                      Center belt concentration indicates roll barrel crown wear at finishing stand 03. Recommended corrective action: Regrind roll crown profiles at next shift maintenance.
-                    </p>
-                  </div>
-
-                  <div className="pt-4 border-t border-black/10 dark:border-white/10 flex items-center justify-between text-[10px] font-bold uppercase">
-                    <span className={c.textMuted}>CALIBRATION:</span>
-                    <span className="text-emerald-500">OPTICAL ENCODER SYNCED</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* ================= TAB 3: BATCH QUEUE & PENDING TASKS ================= */}
-          {activeTab === "queue" && (
-            <div className="space-y-6">
-              <div className={`p-5 border ${c.line} ${c.surface} flex flex-col sm:flex-row sm:items-center justify-between gap-4`}>
-                <div>
-                  <h2 className={`text-lg font-black uppercase tracking-tight font-sans ${c.textPrimary}`}>
-                    BATCH QUEUE & PENDING SPECIMEN RUNS
-                  </h2>
-                  <p className={`text-xs uppercase mt-1 ${c.textMuted}`}>
-                    Continuous coil inspections scheduled from line stands 01 through 04.
-                  </p>
-                </div>
-
-                <div className="flex items-center gap-3">
-                  <button
-                    onClick={simulateProcessBatch}
-                    disabled={isProcessingQueue}
-                    className="px-5 py-2.5 bg-[#d5ff38] text-black font-black text-xs uppercase tracking-wider hover:bg-[#c2ed20] transition-transform flex items-center gap-2 border border-black/10"
-                  >
-                    {isProcessingQueue ? (
-                      <LoaderCircle size={14} className="animate-spin" />
-                    ) : (
-                      <Play size={14} className="fill-current" />
-                    )}
-                    <span>{isProcessingQueue ? "PROCESSING BATCH..." : "RUN ENTIRE BATCH"}</span>
-                  </button>
-                </div>
-              </div>
-
-              {/* Tasks List */}
-              <div className={`border ${c.line} ${c.surface} divide-y`} style={{ borderColor: c.line }}>
-                {pendingTasks.map((task) => (
-                  <div
-                    key={task.id}
-                    className={`p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 transition-colors ${c.hover}`}
-                  >
-                    <div className="flex items-start gap-4">
-                      <div className="w-10 h-10 border flex items-center justify-center font-bold text-xs" style={{ borderColor: c.line }}>
-                        <Scan size={18} className={isDark ? "text-[#d5ff38]" : "text-emerald-700"} />
-                      </div>
-                      <div>
-                        <div className="flex items-center gap-3">
-                          <span className={`font-black text-sm uppercase ${c.textPrimary}`}>
-                            {task.coilId}
-                          </span>
-                          <span className="text-[10px] font-mono px-1.5 py-0.5 border" style={{ borderColor: c.line }}>
-                            {task.id}
-                          </span>
-                          <span
-                            className={`px-2 py-0.5 text-[9px] font-black uppercase ${
-                              task.priority === "CRITICAL"
-                                ? "bg-red-500 text-white"
-                                : task.priority === "HIGH"
-                                ? "bg-amber-500 text-black"
-                                : "bg-black/10 dark:bg-white/10"
-                            }`}
-                          >
-                            {task.priority}
-                          </span>
-                        </div>
-                        <p className={`text-xs mt-1 uppercase ${c.textMuted}`}>
-                          Line: {task.line} · Queued at {task.time} · Specimen: {task.sample}
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-4">
-                      <div className="text-right">
-                        <div className="text-[10px] font-bold uppercase">
-                          STATUS:{" "}
-                          <span
-                            className={
-                              task.status === "COMPLETED"
-                                ? "text-emerald-600 font-black"
-                                : task.status === "PROCESSING"
-                                ? "text-amber-500 font-black"
-                                : c.textMuted
-                            }
-                          >
-                            {task.status}
-                          </span>
-                        </div>
-                        {task.progress > 0 && task.progress < 100 && (
-                          <div className="w-32 bg-black/10 dark:bg-white/10 h-1.5 mt-1 overflow-hidden">
-                            <div className="bg-emerald-500 h-full" style={{ width: `${task.progress}%` }} />
-                          </div>
-                        )}
-                      </div>
-
-                      <button
-                        onClick={() => runQueueTask(task)}
-                        className="px-4 py-2 border text-xs font-bold uppercase tracking-wider hover:bg-[#d5ff38] hover:text-black hover:border-[#d5ff38] transition-all"
-                        style={{ borderColor: c.line }}
-                      >
-                        INSPECT NOW ↗
+                      <button onClick={exportCSV} className={`w-full py-2.5 border text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 ${c.line} ${c.hover} ${c.textPrimary}`}>
+                        <FileSpreadsheet size={14} />EXPORT FULL AUDIT CSV
                       </button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ═══════════ TAB: BATCH QUEUE ═══════════ */}
+          {activeTab === "queue" && (
+            <div className="space-y-5">
+              <div className={`p-5 border ${c.line} ${c.surface} flex flex-col sm:flex-row sm:items-center justify-between gap-3`}>
+                <div>
+                  <h2 className={`text-lg font-black uppercase tracking-tight font-sans ${c.textPrimary}`}>BATCH QUEUE & PENDING TASKS</h2>
+                  <p className={`text-xs uppercase mt-1 ${c.textMuted}`}>{pendingTasks.filter((t) => t.status !== "COMPLETED").length} tasks awaiting inspection</p>
+                </div>
+                <button onClick={simulateProcessBatch} disabled={isProcessingQueue}
+                  className={`px-5 py-2.5 text-xs font-black uppercase tracking-wider flex items-center gap-2 border ${c.accentButton} border-transparent ${isProcessingQueue ? "opacity-50 cursor-not-allowed" : ""}`}>
+                  {isProcessingQueue ? <LoaderCircle size={14} className="animate-spin" /> : <Zap size={14} className="fill-current" />}
+                  RUN ENTIRE BATCH
+                </button>
+              </div>
+
+              <div className="space-y-3">
+                {pendingTasks.map((task) => (
+                  <div key={task.id} className={`border ${c.line} ${c.surface} p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4`}>
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-3">
+                        <span className={`text-[9px] font-black uppercase px-2 py-0.5 ${task.priority === "CRITICAL" ? "bg-rose-600 text-white" : task.priority === "HIGH" ? "bg-amber-500 text-black" : "bg-white/10 text-white"}`}>{task.priority}</span>
+                        <span className={`text-xs font-black uppercase ${c.textPrimary}`}>{task.id}</span>
+                        <span className={`text-[10px] font-mono ${c.textMuted}`}>{task.coilId}</span>
+                      </div>
+                      <p className={`text-[10px] uppercase ${c.textMuted}`}>{task.line} · Heat: {task.heatNumber} · {task.time}</p>
+                      {task.progress > 0 && task.progress < 100 && (
+                        <div className="w-full bg-white/10 h-1 mt-2"><div className="bg-[#d5ff38] h-full" style={{ width: `${task.progress}%` }} /></div>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className={`text-[9px] px-2 py-0.5 font-bold uppercase ${task.status === "COMPLETED" ? "text-emerald-500 border border-emerald-500/30" : task.status === "PROCESSING" ? "text-amber-500 border border-amber-500/30" : `${c.textMuted} border ${c.line}`}`}>{task.status}</span>
+                      {task.status !== "COMPLETED" && (
+                        <button onClick={() => runQueueTask(task)} className={`px-3 py-1.5 text-[10px] font-black uppercase border ${c.accentButton} border-transparent flex items-center gap-1`}>
+                          <Scan size={11} />INSPECT NOW ↗
+                        </button>
+                      )}
                     </div>
                   </div>
                 ))}
@@ -1528,193 +1036,208 @@ export default function Dashboard() {
             </div>
           )}
 
-          {/* ================= TAB 4: COMPLETED TASKS & AUDIT TRAIL ================= */}
+          {/* ═══════════ TAB: AUDIT HISTORY ═══════════ */}
           {activeTab === "history" && (
-            <div className="space-y-6">
-              <div className={`p-5 border ${c.line} ${c.surface} flex flex-col sm:flex-row sm:items-center justify-between gap-4`}>
+            <div className="space-y-5">
+              <div className={`p-5 border ${c.line} ${c.surface} flex flex-col sm:flex-row sm:items-center justify-between gap-3`}>
                 <div>
-                  <h2 className={`text-lg font-black uppercase tracking-tight font-sans ${c.textPrimary}`}>
-                    COMPLETED TASKS & QUALITY AUDIT TRAIL
-                  </h2>
-                  <p className={`text-xs uppercase mt-1 ${c.textMuted}`}>
-                    Permanent verified records generated across continuous optical line stands.
-                  </p>
+                  <h2 className={`text-lg font-black uppercase tracking-tight font-sans ${c.textPrimary}`}>COMPLETED AUDIT TRAIL</h2>
+                  <p className={`text-xs uppercase mt-1 ${c.textMuted}`}>{completedTasks.length} inspection records</p>
                 </div>
+                <button onClick={exportCSV} className={`px-5 py-2.5 text-xs font-black uppercase flex items-center gap-2 border ${c.accentButton} border-transparent`}>
+                  <FileSpreadsheet size={14} />EXPORT CSV
+                </button>
+              </div>
 
-                <div className="flex flex-wrap items-center gap-3">
-                  {/* Search Input */}
-                  <div className="flex items-center border px-3 py-1.5 text-xs font-mono" style={{ borderColor: c.line }}>
-                    <Search size={14} className="opacity-40 mr-2" />
-                    <input
-                      type="text"
-                      placeholder="SEARCH COIL OR DEFECT..."
-                      value={historySearch}
-                      onChange={(e) => setHistorySearch(e.target.value)}
-                      className="bg-transparent outline-none text-[11px] placeholder:opacity-40 uppercase w-36 sm:w-48"
-                    />
-                  </div>
-
-                  {/* Filter Select */}
-                  <div className="flex items-center gap-1 border p-1" style={{ borderColor: c.line }}>
-                    {["ALL", "PASS", "WARNING", "REJECT"].map((f) => (
-                      <button
-                        key={f}
-                        onClick={() => setHistoryFilter(f)}
-                        className={`px-2 py-0.5 text-[9px] font-bold uppercase transition-colors ${
-                          historyFilter === f
-                            ? "bg-[#d5ff38] text-black font-black"
-                            : "opacity-60 hover:opacity-100"
-                        }`}
-                      >
-                        {f}
-                      </button>
-                    ))}
-                  </div>
-
-                  <button
-                    onClick={exportCSV}
-                    className="px-4 py-2 bg-[#d5ff38] text-black font-black text-xs uppercase tracking-wider flex items-center gap-2 border border-black/10 hover:bg-[#c2ed20]"
-                  >
-                    <FileSpreadsheet size={15} />
-                    <span>EXPORT AUDIT CSV</span>
-                  </button>
+              <div className="flex flex-col sm:flex-row gap-3">
+                <div className={`flex items-center gap-2 border ${c.line} ${c.surface} px-3 flex-1`}>
+                  <Search size={14} className={c.textMuted} />
+                  <input type="text" placeholder="Search coil, specimen, defect…" value={historySearch} onChange={(e) => setHistorySearch(e.target.value)}
+                    className={`flex-1 py-2.5 text-xs uppercase bg-transparent outline-none ${c.textPrimary} placeholder:${c.textMuted}`} />
+                </div>
+                <div className={`flex border ${c.line} text-[10px] font-bold`}>
+                  {["ALL","PASS","WARNING","REJECT"].map((f) => (
+                    <button key={f} onClick={() => setHistoryFilter(f)}
+                      className={`px-3 py-2 uppercase transition-colors ${historyFilter === f ? (isDark ? "bg-[#d5ff38] text-black" : "bg-slate-900 text-white") : `${c.hover} ${c.textMuted}`}`}>{f}</button>
+                  ))}
                 </div>
               </div>
 
-              {/* Table */}
-              <div className={`border ${c.line} ${c.surface} overflow-x-auto`}>
-                <table className="w-full text-left text-xs font-mono">
-                  <thead className={`border-b text-[10px] uppercase ${c.line} ${c.surfaceRaised} ${c.textMuted}`}>
-                    <tr>
-                      <th className="p-3.5">RECORD ID</th>
-                      <th className="p-3.5">COIL REF</th>
-                      <th className="p-3.5">SPECIMEN</th>
-                      <th className="p-3.5">DEFECT COUNT</th>
-                      <th className="p-3.5">PRIMARY DEFECT</th>
-                      <th className="p-3.5">CONFIDENCE</th>
-                      <th className="p-3.5">GRADE</th>
-                      <th className="p-3.5">VERDICT</th>
-                      <th className="p-3.5">OPERATOR</th>
-                    </tr>
-                  </thead>
-                  <tbody className={`divide-y ${c.line}`}>
-                    {displayedCompleted.map((row) => (
-                      <tr key={row.id} className={`${c.hover} transition-colors`}>
-                        <td className="p-3.5 font-bold">{row.id}</td>
-                        <td className={`p-3.5 font-bold ${c.textPrimary}`}>{row.coilId}</td>
-                        <td className={`p-3.5 ${c.textMuted}`}>{row.specimen}</td>
-                        <td className="p-3.5 font-bold">{row.defectCount}</td>
-                        <td className="p-3.5 uppercase font-bold text-amber-500">
-                          {prettyName(row.primaryDefect)}
-                        </td>
-                        <td className={`p-3.5 font-bold ${isDark ? "text-[#d5ff38]" : "text-emerald-700"}`}>
-                          {row.confidence}
-                        </td>
-                        <td className="p-3.5 font-bold text-[10px]">{row.grade}</td>
-                        <td className="p-3.5">
-                          <span
-                            className={`px-2 py-0.5 text-[9px] font-black uppercase ${
-                              row.verdict === "PASS"
-                                ? "bg-emerald-600 text-white"
-                                : row.verdict === "WARNING"
-                                ? "bg-amber-500 text-black"
-                                : "bg-red-600 text-white"
-                            }`}
-                          >
-                            {row.verdict}
-                          </span>
-                        </td>
-                        <td className={`p-3.5 ${c.textMuted}`}>{row.operator}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+              <div className="space-y-2">
+                {displayedCompleted.map((t) => (
+                  <div key={t.id} className={`border ${c.line} ${c.surface} p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs`}>
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-3">
+                        <span className={`font-black uppercase ${c.textPrimary}`}>{t.id}</span>
+                        <span className={`font-mono ${c.textMuted}`}>{t.coilId}</span>
+                        <span className={`font-mono text-[9px] ${c.textMuted}`}>{t.time}</span>
+                      </div>
+                      <p className={`text-[10px] ${c.textMuted} uppercase`}>{t.specimen} · {t.defectCount} defect{t.defectCount !== 1 ? "s" : ""} · Primary: {prettyName(t.primaryDefect)} · Conf: {t.confidence} · {t.latency || "—"}</p>
+                      <p className={`text-[9px] ${c.textMuted} uppercase`}>Operator: {t.operator} · {t.grade}</p>
+                    </div>
+                    <span className={`text-[10px] px-3 py-1.5 font-black uppercase ${t.verdict === "PASS" ? "bg-emerald-600 text-white" : t.verdict === "REJECT" ? "bg-rose-600 text-white" : "bg-amber-500 text-black"}`}>{t.verdict}</span>
+                  </div>
+                ))}
+                {displayedCompleted.length === 0 && (
+                  <div className={`p-8 text-center text-xs uppercase ${c.textMuted}`}>No records match current filter.</div>
+                )}
               </div>
             </div>
           )}
 
-          {/* ================= TAB 5: MODEL BENCHMARKS ================= */}
+          {/* ═══════════ TAB: MODEL BENCHMARKS ═══════════ */}
           {activeTab === "benchmarks" && (
             <div className="space-y-6">
               <div className={`p-5 border ${c.line} ${c.surface}`}>
-                <h2 className={`text-lg font-black uppercase tracking-tight font-sans ${c.textPrimary}`}>
-                  YOLO11 WEIGHTS & TRAINING BENCHMARK LAB
-                </h2>
-                <p className={`text-xs uppercase mt-1 ${c.textMuted}`}>
-                  Model evaluation results from outputs/training/neu_det_improved
-                </p>
+                <h2 className={`text-lg font-black uppercase tracking-tight font-sans ${c.textPrimary}`}>NEU-DET MODEL BENCHMARKS</h2>
+                <p className={`text-xs uppercase mt-1 ${c.textMuted}`}>Active weights: neu_det_improved / YOLO11 Architecture</p>
               </div>
-
-              <div className={`p-6 border ${c.line} ${c.surface}`}>
-                <div className="grid md:grid-cols-2 gap-8">
-                  <div>
-                    <h3 className={`text-xs font-black uppercase tracking-wider mb-4 ${c.textPrimary}`}>
-                      ACTIVE MODEL WEIGHTS & CONFIGURATION
-                    </h3>
-                    <div className="space-y-3 text-xs font-mono">
-                      <div className={`p-3 border ${c.line} ${c.surfaceRaised}`}>
-                        <div className={`text-[10px] ${c.textMuted}`}>WEIGHTS PATH:</div>
-                        <div className="font-bold text-[11px] truncate">
-                          outputs/training/neu_det_improved/weights/best.pt
-                        </div>
-                      </div>
-                      <div className={`p-3 border ${c.line} ${c.surfaceRaised}`}>
-                        <div className={`text-[10px] ${c.textMuted}`}>ARCHITECTURE:</div>
-                        <div className="font-bold">YOLO11 Nano Backbone (2.6M Parameters)</div>
-                      </div>
-                      <div className={`p-3 border ${c.line} ${c.surfaceRaised}`}>
-                        <div className={`text-[10px] ${c.textMuted}`}>TRAINING RESOLUTION:</div>
-                        <div className="font-bold">320 × 320 px (Batch 4, AdamW)</div>
-                      </div>
-                    </div>
+              <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                {[
+                  { label: "mAP@50",     value: "67.7%", note: "vs 85% target",  color: "text-amber-500" },
+                  { label: "Precision",  value: "61.5%", note: "all 6 classes",  color: "text-[#d5ff38]" },
+                  { label: "Recall",     value: "66.4%", note: "30 epoch run",   color: "text-sky-400"   },
+                  { label: "mAP@50-95", value: "34.4%", note: "multi-IoU",      color: "text-purple-400"},
+                ].map((m) => (
+                  <div key={m.label} className={`p-5 border ${c.line} ${c.surface}`}>
+                    <div className={`text-[10px] font-bold uppercase tracking-wider ${c.textMuted}`}>{m.label}</div>
+                    <div className={`text-3xl font-black font-sans mt-1 ${m.color}`}>{m.value}</div>
+                    <div className={`text-[10px] mt-1 uppercase ${c.textMuted}`}>{m.note}</div>
                   </div>
-
-                  <div>
-                    <h3 className={`text-xs font-black uppercase tracking-wider mb-4 ${c.textPrimary}`}>
-                      BENCHMARK METRICS SUMMARY
-                    </h3>
-                    <div className="grid grid-cols-2 gap-3 text-center">
-                      <div className={`p-4 border ${c.line} ${c.surfaceRaised}`}>
-                        <div className={`text-[10px] uppercase ${c.textMuted}`}>PRECISION</div>
-                        <div className="text-2xl font-black mt-1">61.5%</div>
-                      </div>
-                      <div className={`p-4 border ${c.line} ${c.surfaceRaised}`}>
-                        <div className={`text-[10px] uppercase ${c.textMuted}`}>RECALL</div>
-                        <div className="text-2xl font-black mt-1">66.3%</div>
-                      </div>
-                      <div className={`p-4 border ${c.line} ${c.surfaceRaised}`}>
-                        <div className={`text-[10px] uppercase ${c.textMuted}`}>mAP@50</div>
-                        <div className={`text-2xl font-black mt-1 ${isDark ? "text-[#d5ff38]" : "text-emerald-700"}`}>
-                          67.7%
-                        </div>
-                      </div>
-                      <div className={`p-4 border ${c.line} ${c.surfaceRaised}`}>
-                        <div className={`text-[10px] uppercase ${c.textMuted}`}>mAP@50-95</div>
-                        <div className="text-2xl font-black mt-1">34.4%</div>
-                      </div>
-                    </div>
+                ))}
+              </div>
+              <div className={`p-6 border ${c.line} ${c.surface} space-y-3`}>
+                <h3 className={`text-xs font-black uppercase tracking-wider mb-4 ${c.textPrimary}`}>TRAINING CONFIGURATION</h3>
+                {[
+                  ["Architecture",  "YOLOv11 Nano (yolo11n.pt)"],
+                  ["Training Data", "NEU-DET · 1,799 Images · 6 Classes"],
+                  ["Epochs",        "30 (CPU training — ~9.6 hrs)"],
+                  ["Image Size",    "320×320"],
+                  ["Optimizer",     "AdamW · lr=0.001 · wd=0.0005"],
+                  ["Device",        "CPU (No NVIDIA GPU detected)"],
+                  ["Model Path",    "outputs/training/neu_det_improved/weights/best.pt"],
+                  ["Backend Status",backendStatus === "online" ? "✓ Online & Healthy" : "✗ Offline"],
+                ].map(([k, v]) => (
+                  <div key={k} className={`flex gap-4 text-xs border-b pb-2 ${c.line}`}>
+                    <span className={`font-bold uppercase w-36 shrink-0 ${c.textMuted}`}>{k}</span>
+                    <span className={c.textPrimary}>{v}</span>
                   </div>
-                </div>
+                ))}
+              </div>
+              <div className={`p-5 border border-amber-500/30 bg-amber-500/5 text-xs`}>
+                <p className={`font-black uppercase text-amber-500 mb-1`}>⚡ UPGRADE PATH: 85%+ mAP</p>
+                <p className={c.textMuted}>Train YOLO11s/m on Google Colab free T4 GPU · 80 epochs · imgsz=640 · Cosine LR · CLAHE augmentation → ~15 mins vs 9+ hrs on CPU.</p>
               </div>
             </div>
           )}
+
+          {/* ═══════════ TAB: OPERATOR PROFILE ═══════════ */}
+          {activeTab === "profile" && (
+            <div className="space-y-6">
+              {/* Header */}
+              <div className={`p-6 border ${c.line} ${c.surface} flex flex-col sm:flex-row sm:items-center justify-between gap-5`}>
+                <div className="flex items-center gap-5">
+                  <div className="w-16 h-16 bg-[#d5ff38] text-black font-black text-2xl flex items-center justify-center rounded-none font-sans">
+                    {profile.name.split(" ").map((n) => n[0]).join("")}
+                  </div>
+                  <div>
+                    <h2 className={`text-xl font-black uppercase tracking-tight font-sans ${c.textPrimary}`}>{profile.name}</h2>
+                    <p className={`text-xs uppercase mt-0.5 ${isDark ? "text-[#d5ff38]" : "text-emerald-700"} font-bold`}>{profile.role}</p>
+                    <p className={`text-[10px] uppercase mt-0.5 ${c.textMuted}`}>{profile.plant} · {profile.shift}</p>
+                  </div>
+                </div>
+                <button onClick={() => { setProfileDraft({ ...profile }); setProfileEditing(!profileEditing); }}
+                  className={`px-5 py-2.5 text-xs font-black uppercase flex items-center gap-2 border ${profileEditing ? `border-rose-500/50 text-rose-500 ${c.hover}` : c.accentButton + " border-transparent"}`}>
+                  {profileEditing ? <><X size={14} />CANCEL</> : <><Settings size={14} />EDIT PROFILE</>}
+                </button>
+              </div>
+
+              {/* Stats Row */}
+              <div className="grid grid-cols-3 gap-4">
+                {[
+                  { label: "TOTAL INSPECTIONS", value: (profile.totalInspections + completedTasks.length).toLocaleString() },
+                  { label: "AVG ACCURACY",       value: profile.avgAccuracy },
+                  { label: "EMPLOYEE ID",         value: profile.employeeId },
+                ].map((s) => (
+                  <div key={s.label} className={`p-5 border ${c.line} ${c.surface} text-center`}>
+                    <div className={`text-[10px] font-bold uppercase tracking-wider ${c.textMuted}`}>{s.label}</div>
+                    <div className={`text-2xl font-black font-sans mt-1 ${isDark ? "text-[#d5ff38]" : "text-emerald-700"}`}>{s.value}</div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Profile Fields */}
+              {profileEditing ? (
+                <div className={`p-6 border ${c.line} ${c.surface} space-y-4`}>
+                  <h3 className={`text-xs font-black uppercase tracking-wider mb-4 ${c.textPrimary}`}>EDIT OPERATOR PROFILE</h3>
+                  <div className="grid sm:grid-cols-2 gap-4">
+                    {[
+                      { key: "name",        label: "Full Name" },
+                      { key: "role",        label: "Role / Title" },
+                      { key: "email",       label: "Email Address" },
+                      { key: "plant",       label: "Plant / Facility" },
+                      { key: "department",  label: "Department" },
+                      { key: "shift",       label: "Shift Assignment" },
+                      { key: "certifications", label: "Certifications" },
+                    ].map(({ key, label }) => (
+                      <div key={key} className="space-y-1">
+                        <label className={`text-[10px] font-bold uppercase tracking-wider ${c.textMuted}`}>{label}</label>
+                        <input type="text" value={profileDraft[key] || ""}
+                          onChange={(e) => setProfileDraft((p) => ({ ...p, [key]: e.target.value }))}
+                          className={`w-full px-3 py-2.5 text-xs border outline-none transition-colors ${c.input}`} />
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="space-y-2">
+                    <p className={`text-[10px] font-black uppercase tracking-wider ${c.textMuted}`}>NOTIFICATION PREFERENCES</p>
+                    {[
+                      { key: "notifEmail",    label: "Email digest on shift end" },
+                      { key: "notifCritical", label: "Alert on GRADE C (REJECT)" },
+                      { key: "notifBatch",    label: "Batch completion notification" },
+                    ].map(({ key, label }) => (
+                      <label key={key} className="flex items-center gap-3 cursor-pointer">
+                        <input type="checkbox" checked={!!profileDraft[key]}
+                          onChange={(e) => setProfileDraft((p) => ({ ...p, [key]: e.target.checked }))}
+                          className="w-4 h-4 accent-emerald-500" />
+                        <span className={`text-xs uppercase font-bold ${c.textPrimary}`}>{label}</span>
+                      </label>
+                    ))}
+                  </div>
+
+                  <div className="flex gap-3 pt-2">
+                    <button onClick={saveProfileEdits} className={`px-6 py-2.5 text-xs font-black uppercase flex items-center gap-2 border ${c.accentButton} border-transparent`}>
+                      <Check size={14} />SAVE CHANGES
+                    </button>
+                    <button onClick={() => setProfileEditing(false)} className={`px-6 py-2.5 text-xs font-bold uppercase border ${c.line} ${c.hover} ${c.textMuted}`}>
+                      DISCARD
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className={`p-6 border ${c.line} ${c.surface} grid sm:grid-cols-2 gap-4 text-xs`}>
+                  {[
+                    ["Email",            profile.email],
+                    ["Department",       profile.department],
+                    ["Plant",            profile.plant],
+                    ["Shift",            profile.shift],
+                    ["Join Date",        profile.joinDate],
+                    ["Certifications",   profile.certifications],
+                    ["Email Digest",     profile.notifEmail ? "Enabled" : "Disabled"],
+                    ["Reject Alerts",    profile.notifCritical ? "Enabled" : "Disabled"],
+                  ].map(([k, v]) => (
+                    <div key={k} className={`flex flex-col gap-0.5 border-b pb-3 ${c.line}`}>
+                      <span className={`text-[10px] font-bold uppercase tracking-wider ${c.textMuted}`}>{k}</span>
+                      <span className={`font-bold ${c.textPrimary}`}>{v}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
         </main>
       </div>
-
-      {/* ================= 3. COMPACT TACTILE FOOTER ================= */}
-      <footer className={`border-t ${c.line} ${c.surface} px-4 sm:px-6 py-2.5 text-[10px] uppercase tracking-widest flex flex-col sm:flex-row items-center justify-between gap-2 select-none`}>
-        <div className="flex items-center gap-4">
-          <span className={c.textPrimary}>DEFECTVISION STUDIO v2.4 // COIL QUALITY ASSURANCE</span>
-          <span className="hidden md:inline opacity-30">|</span>
-          <span className={`hidden md:inline ${c.textMuted}`}>PORT 8000 (FASTAPI) · PORT 5173 (VITE)</span>
-        </div>
-        <div className="flex items-center gap-6">
-          <Link to="/" className="hover:text-emerald-500 transition-colors">
-            LANDING PAGE
-          </Link>
-          <span className={c.textMuted}>DIN EN 10163 COMPLIANT</span>
-        </div>
-      </footer>
     </div>
   );
 }
