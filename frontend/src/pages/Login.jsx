@@ -45,15 +45,33 @@ export default function Login() {
     setLoading(true);
 
     try {
-      // Connect your backend login API here.
-      // Example:
-      // const response = await axios.post("/api/auth/login", form);
-      // Store the returned token securely according to your auth setup.
-      // navigate("/dashboard");
+      const apiBase = (import.meta.env.VITE_API_URL || "http://127.0.0.1:8000").replace(/\/$/, "");
+      const response = await fetch(`${apiBase}/auth/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: form.email.trim().toLowerCase(),
+          password: form.password,
+        }),
+      });
 
-      setError("Authentication API is not connected yet.");
-    } catch {
-      setError("Unable to sign in. Please try again.");
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(data.detail || data.message || `Sign in failed (${response.status}).`);
+      }
+      if (!data.access_token) {
+        throw new Error("Login succeeded but the server did not return an access token.");
+      }
+
+      const storage = rememberMe ? window.localStorage : window.sessionStorage;
+      storage.setItem("defectvision_token", data.access_token);
+      if (data.user) storage.setItem("defectvision_user", JSON.stringify(data.user));
+      // Remove any stale token from the other storage location.
+      (rememberMe ? window.sessionStorage : window.localStorage).removeItem("defectvision_token");
+      (rememberMe ? window.sessionStorage : window.localStorage).removeItem("defectvision_user");
+      navigate("/dashboard", { replace: true });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to sign in. Please try again.");
     } finally {
       setLoading(false);
     }

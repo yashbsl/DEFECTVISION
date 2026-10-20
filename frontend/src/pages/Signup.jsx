@@ -66,19 +66,30 @@ export default function Signup() {
     setLoading(true);
 
     try {
-      // Connect your backend registration API here.
-      // Example:
-      // await axios.post("/api/auth/register", {
-      //   name: form.name.trim(),
-      //   email: form.email.trim(),
-      //   password: form.password,
-      // });
-      //
-      // On success, navigate to login or verify email.
+      const apiBase = (import.meta.env.VITE_API_URL || "http://127.0.0.1:8000").replace(/\/$/, "");
+      const response = await fetch(`${apiBase}/auth/register`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: form.name.trim(),
+          email: form.email.trim().toLowerCase(),
+          password: form.password,
+        }),
+      });
 
-      setError("Registration API is not connected yet.");
-    } catch {
-      setError("Unable to create your account. Please try again.");
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(data.detail || data.message || `Registration failed (${response.status}).`);
+      }
+
+      setSuccess(data.message || "Account created successfully. You can now sign in.");
+      setForm({ name: "", email: "", password: "", confirmPassword: "" });
+      setAcceptedTerms(false);
+      window.setTimeout(() => {
+        window.location.assign("/login");
+      }, 900);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to create your account. Please try again.");
     } finally {
       setLoading(false);
     }

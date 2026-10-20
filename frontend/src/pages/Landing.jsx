@@ -304,7 +304,7 @@ export default function Landing() {
 
             {/* Hero Launch Button */}
             <Link
-              to="/dashboard"
+              to="/login"
               className="flex items-center gap-3 px-6 sm:px-8 text-xs font-black uppercase tracking-wider bg-[#d5ff38] text-black hover:bg-[#c4f024] transition-colors"
             >
               <span>INSPECTION STUDIO</span>
@@ -359,7 +359,7 @@ export default function Landing() {
             <div className="mt-12 pt-8 border-t" style={{ borderColor: c.line }}>
               <div className="flex flex-wrap items-center gap-4 mb-8">
                 <Link
-                  to="/dashboard"
+                  to="/login"
                   className="inline-flex items-center gap-4 px-8 py-4 bg-[#d5ff38] text-black font-black text-xs uppercase tracking-widest hover:bg-[#c2ed20] transition-transform hover:-translate-y-0.5"
                 >
                   <span>ENTER RUNTIME STUDIO</span>
@@ -810,7 +810,7 @@ export default function Landing() {
 
           <div className="mt-10 flex flex-wrap justify-center gap-4">
             <Link
-              to="/dashboard"
+              to="/login"
               className="inline-flex items-center gap-4 px-10 py-5 bg-[#d5ff38] text-black font-black text-sm uppercase tracking-widest hover:bg-[#c4f024] transition-all hover:scale-105"
             >
               <span>LAUNCH INSPECTION WORKSPACE</span>
@@ -895,7 +895,7 @@ export default function Landing() {
           <div className="pt-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-[10px] opacity-50 uppercase tracking-widest">
             <div>© 2026 DEFECTVISION AI · ALL RIGHTS RESERVED</div>
             <div className="flex items-center gap-6">
-              <Link to="/dashboard" className="hover:text-[#d5ff38]">STUDIO</Link>
+              <Link to="/login" className="hover:text-[#d5ff38]">STUDIO</Link>
               <Link to="/login" className="hover:text-[#d5ff38]">LOGIN</Link>
               <button
                 onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
